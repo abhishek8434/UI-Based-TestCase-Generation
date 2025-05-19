@@ -29,7 +29,6 @@ This project automates the generation of detailed Selenium test cases in Python 
 ├── .gitignore            # Git ignore file
 ├── README.md             # Project documentation
 ├── app.py               # Flask application
-├── main.py              # Main script
 ├── requirements.txt      # Python dependencies
 ├── ai/                  # AI integration
 │   ├── generator.py     # Test case generation
