@@ -1,0 +1,10 @@
+openai
+requests
+selenium
+python-dotenv
+beautifulsoup4
+pandas
+Pillow
+flask
+flask-cors
+openpyxl

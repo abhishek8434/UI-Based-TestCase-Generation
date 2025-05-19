@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Case Generator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .loader-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .loader { 
+            width: 175px;
+            height: 80px;
+            display: block;
+            margin: auto;
+            background-image: radial-gradient(circle 25px at 25px 25px, #FFF 100%, transparent 0), radial-gradient(circle 50px at 50px 50px, #FFF 100%, transparent 0), radial-gradient(circle 25px at 25px 25px, #FFF 100%, transparent 0), linear-gradient(#FFF 50px, transparent 0);
+            background-size: 50px 50px, 100px 76px, 50px 50px, 120px 40px;
+            background-position: 0px 30px, 37px 0px, 122px 30px, 25px 40px;
+            background-repeat: no-repeat;
+            position: relative;
+            box-sizing: border-box;
+            
+        }
+        .loader::after {
+        content: '';  
+        left: 50%;
+        bottom: 0;
+        transform: translate(-50%, 0);
+        position: absolute;
+        border: 15px solid transparent;
+        border-top-color: #FF3D00;
+        box-sizing: border-box;
+        animation: fadePush 1s linear infinite;
+        }
+        .loader::before {
+        content: '';  
+        left: 50%;
+        bottom: 30px;
+        transform: translate(-50%, 0);
+        position: absolute;
+        width: 15px;
+        height: 15px;
+        background: #FF3D00;
+        box-sizing: border-box;
+        animation: fadePush 1s linear infinite;
+        }
+
+
+
+        @keyframes fadePush {
+        0% {
+            transform: translate(-50%, -15px);
+            opacity: 0;
+        }
+        50% {
+            transform: translate(-50%, 0px);
+            opacity: 1;
+        }
+        100% {
+            transform: translate(-50%, 15px);
+            opacity: 0;
+        }
+        }
+    </style>
+</head>
+<body>
+    <!-- Add loader container -->
+    <div class="loader-container">
+        <div class="loader"></div>
+    </div>
+    <div class="container mt-5">
+        <h1 class="mb-4">Test Case Generator</h1>
+        
+        <div class="card">
+            <div class="card-body">
+                <form id="generatorForm">
+                    <div class="mb-3">
+                        <label class="form-label">Source Type</label>
+                        <select class="form-select" id="sourceType" name="sourceType">
+                            <option value="jira">Jira</option>
+                            <option value="azure">Azure DevOps</option>
+                            <option value="image">Image</option>
+                        </select>
+                    </div>
+                    
+                    <div id="jiraFields">
+                        <div class="mb-3">
+                            <label class="form-label">Jira URL</label>
+                            <input type="text" class="form-control" name="jiraUrl">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Jira User</label>
+                            <input type="text" class="form-control" name="jiraUser">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Jira API Token</label>
+                            <input type="password" class="form-control" name="jiraToken">
+                        </div>
+                    </div>
+                    
+                    <div id="azureFields" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label">Azure DevOps URL</label>
+                            <input type="text" class="form-control" name="azureUrl">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Azure Organization</label>
+                            <input type="text" class="form-control" name="azureOrg">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Azure Project</label>
+                            <input type="text" class="form-control" name="azureProject">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Azure PAT</label>
+                            <input type="password" class="form-control" name="azurePat">
+                        </div>
+                    </div>
+                    
+                    <div id="imageFields" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label">Upload Image</label>
+                            <input type="file" class="form-control" name="imageFile" accept="image/*">
+                            <small class="text-muted">Upload an image containing the test case requirements</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3" id="itemIdField">
+                        <label class="form-label">Item ID(s)</label>
+                        <input type="text" class="form-control" name="itemId" id="itemIdInput" placeholder="Enter single or multiple IDs (e.g., KAN-1,KAN-2)">
+                        <small class="text-muted">For multiple items, separate with commas (e.g., KAN-1,KAN-2)</small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Generate Test Cases</button>
+                </form>
+                
+                <div id="results" class="mt-4" style="display: none;">
+                    <h3>Generated Test Cases</h3>
+                    <pre id="testCases" class="bg-light p-3"></pre>
+                    
+                    <div class="mt-3">
+                        <h4>Download Files</h4>
+                        <div id="downloads"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('sourceType').addEventListener('change', function() {
+            const jiraFields = document.getElementById('jiraFields');
+            const azureFields = document.getElementById('azureFields');
+            const imageFields = document.getElementById('imageFields');
+            const itemIdField = document.getElementById('itemIdField');
+            
+            // Hide all fields first
+            jiraFields.style.display = 'none';
+            azureFields.style.display = 'none';
+            imageFields.style.display = 'none';
+            
+            // Show relevant fields based on selection
+            if (this.value === 'jira') {
+                jiraFields.style.display = 'block';
+                itemIdField.style.display = 'block';
+            } else if (this.value === 'azure') {
+                azureFields.style.display = 'block';
+                itemIdField.style.display = 'block';
+            } else if (this.value === 'image') {
+                imageFields.style.display = 'block';
+                itemIdField.style.display = 'none';
+            }
+            
+            // Update itemId input required attribute
+            const itemIdInput = document.getElementById('itemIdInput');
+            if (this.value === 'image') {
+                itemIdField.style.display = 'none';
+                itemIdInput.removeAttribute('required');
+            } else {
+                itemIdField.style.display = 'block';
+                itemIdInput.setAttribute('required', '');
+            }
+        });
+        
+        document.getElementById('generatorForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const sourceType = formData.get('sourceType');
+            
+            // Add validation for itemId when required
+            if (sourceType !== 'image') {
+                const itemId = formData.get('itemId');
+                if (!itemId || itemId.trim() === '') {
+                    alert('Please enter at least one Item ID');
+                    return;
+                }
+            }
+            
+            // Show loader before any processing
+            const loader = document.querySelector('.loader-container');
+            loader.style.display = 'flex';
+            
+            try {
+                const formData = new FormData(this);
+                const sourceType = formData.get('sourceType');
+                
+                if (sourceType === 'image') {
+                    const imageFile = formData.get('imageFile');
+                    if (!imageFile) {
+                        alert('Please select an image file');
+                        loader.style.display = 'none';
+                        return;
+                    }
+                    
+                    const response = await fetch('/api/generate', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.error) {
+                        alert('Error: ' + result.error);
+                        return;
+                    }
+                    
+                    window.location.href = `/results?files=${encodeURIComponent(JSON.stringify(result.files))}`;
+                } else {
+                    // Existing Jira/Azure logic
+                    const data = Object.fromEntries(formData);
+                    data.itemId = data.itemId.split(',').map(id => id.trim());
+                    
+                    const response = await fetch('/api/generate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.error) {
+                        alert('Error: ' + result.error);
+                        return;
+                    }
+                    
+                    window.location.href = `/results?files=${encodeURIComponent(JSON.stringify(result.files))}`;
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                // Hide loader in case the redirect doesn't happen
+                loader.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
