@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,20 +11,25 @@
             min-height: 100vh;
             padding-bottom: 2rem;
         }
+
         .container {
             margin-bottom: 3rem;
         }
+
         .accordion-button:not(.collapsed) {
             background-color: #e7f1ff;
         }
+
         .table-container {
             overflow-x: auto;
             padding-bottom: 2rem;
-            margin-bottom: 2rem;
+            margin-bottom: 0.20rem;;
         }
+
         .accordion-body {
             padding-bottom: 2rem !important;
         }
+
         .loading {
             display: inline-block;
             width: 1rem;
@@ -33,11 +39,15 @@
             border-radius: 50%;
             animation: loading-animation 0.75s linear infinite;
         }
+
         @keyframes loading-animation {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="container mt-5">
         <div class="d-flex justify-content-between align-items-center mb-4">
@@ -50,84 +60,392 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const files = JSON.parse(decodeURIComponent(urlParams.get('files')));
-        const testCasesList = document.getElementById('testCasesList');
+        document.addEventListener('DOMContentLoaded', function () {
+            const urlParams = new URLSearchParams(window.location.search);
+            const filesParam = urlParams.get('files');
 
-        Object.entries(files).forEach(([itemId, fileSet], index) => {
-            const accordionItem = document.createElement('div');
-            accordionItem.className = 'accordion-item';
-            accordionItem.innerHTML = `
-                <h2 class="accordion-header" id="heading${index}">
+            if (!filesParam) {
+                document.getElementById('testCasesList').innerHTML = '<div class="alert alert-danger">No files specified in URL.</div>';
+                return;
+            }
+
+            try {
+                window.files = JSON.parse(decodeURIComponent(filesParam));
+            } catch (error) {
+                document.getElementById('testCasesList').innerHTML = '<div class="alert alert-danger">Invalid file data in URL.</div>';
+                return;
+            }
+
+            const testCasesList = document.getElementById('testCasesList');
+
+            // Global state to track loading
+            window.loadingState = {
+                isGenerating: true,
+                retryCount: 0,
+                maxRetries: 60, // 2 minutes (2s * 60)
+                loadedFiles: new Set(),
+                pollInterval: null,  // Add this to track the polling interval
+                directVerificationAttempted: false // Track if we've tried direct verification
+            };
+
+            // Initialize UI
+            Object.entries(window.files).forEach(([itemId, fileSet], index) => {
+                const accordionItem = document.createElement('div');
+                accordionItem.className = 'accordion-item';
+                accordionItem.innerHTML = `
+                <h2 class="accordion-header" id="heading${itemId}">
                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
-                            data-bs-target="#collapse${index}" aria-expanded="false" aria-controls="collapse${index}">
+                            data-bs-target="#collapse${itemId}" aria-expanded="false" aria-controls="collapse${itemId}">
                         Test Cases for ${itemId}
+                        <span id="status-${itemId}" class="ms-2"><span class="loading"></span> Generating test cases...</span>
                     </button>
                 </h2>
-                <div id="collapse${index}" class="accordion-collapse collapse" aria-labelledby="heading${index}" data-bs-parent="#testCasesList">
+                <div id="collapse${itemId}" class="accordion-collapse collapse" aria-labelledby="heading${itemId}" data-bs-parent="#testCasesList">
                     <div class="accordion-body">
                         <div class="mb-3">
-                            <div class="btn-group">
-                                <a href="/api/download/${fileSet.txt}" class="btn btn-primary">Download TXT</a>
-                                <a href="/api/download/${fileSet.excel}" class="btn btn-success">Download Excel</a>
-                                <button class="btn btn-info" onclick="loadTestCases('${fileSet.excel}', 'testCaseTable${index}')">Show Test Cases</button>
+                            <div class="btn-group" id="buttons-${itemId}" style="display: none;">
+                                <a href="/api/download/${fileSet.txt}" class="btn btn-primary" style="display: none;" id="txt-${itemId}">Download TXT</a>
+                                <a href="/api/download/${fileSet.excel}" class="btn btn-success" style="display: none;" id="excel-${itemId}">Download Excel</a>
+                                <button class="btn btn-info" style="display: none;" id="show-${itemId}" onclick="loadTestCases('${fileSet.excel}', 'testCaseTable${itemId}', '${itemId}')">Show Test Cases</button>
                             </div>
                         </div>
-                        <div id="testCaseTable${index}" class="table-container">
-                            <div class="text-center">Click 'Show Test Cases' to view the content</div>
+                        <div id="testCaseTable${itemId}" class="table-container">
+                            <div class="text-center">Prepared test cases...</div>
                         </div>
                     </div>
                 </div>
             `;
-            testCasesList.appendChild(accordionItem);
-        });
-
-        // Initialize all accordions
-        var myCollapsibles = [].slice.call(document.querySelectorAll('.accordion-collapse'));
-        myCollapsibles.map(function (collapseEl) {
-            return new bootstrap.Collapse(collapseEl, {
-                toggle: false
+                testCasesList.appendChild(accordionItem);
+                console.log(`Created accordion item for ${itemId}`);
             });
+
+            // Start with direct file verification immediately
+            verifyFiles();
+
+            // Also check generation status via API
+            checkGenerationStatus();
+
+            // Fallback 1: After 2 seconds, try to show content again
+            setTimeout(function () {
+                if (window.loadingState.isGenerating) {
+                    console.log("First fallback timeout - attempting to show content");
+                    verifyFiles();
+                }
+            }, 2000); // 2 seconds
+
+            // Fallback 2: After 5 seconds, enable download buttons directly
+            setTimeout(function () {
+                console.log("Second fallback timeout - enabling download buttons directly");
+                enableDownloadButtons();
+            }, 5000); // 5 seconds
         });
-    });
 
-    async function loadTestCases(filename, targetId) {
-        const container = document.getElementById(targetId);
-        const button = event.target;
-        const isContentLoaded = container.querySelector('table, pre');
-
-        if (isContentLoaded) {
-            // Toggle content visibility
-            if (container.style.display === 'none') {
-                container.style.display = 'block';
-                button.textContent = 'Hide Test Cases';
-            } else {
-                container.style.display = 'none';
-                button.textContent = 'Show Test Cases';
+        // Function to stop polling
+        function stopPolling() {
+            console.log('Stopping polling');
+            if (window.loadingState.pollInterval) {
+                clearTimeout(window.loadingState.pollInterval);
+                window.loadingState.pollInterval = null;
             }
-            return;
+            window.loadingState.isGenerating = false;
         }
 
-        container.innerHTML = '<div class="text-center"><span class="loading"></span> Loading...</div>';
-        button.textContent = 'Hide Test Cases';
-
-        try {
-            const response = await fetch(`/api/content/${filename}`);
-            const data = await response.json();
-
-            if (data.error) {
-                container.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+        async function checkGenerationStatus() {
+            // If we're no longer generating, stop checking
+            if (!window.loadingState.isGenerating) {
+                console.log("Generation status check stopped - no longer generating");
                 return;
             }
 
-            if (Array.isArray(data.content)) {
-                // Create table from Excel data
+            if (window.loadingState.retryCount >= window.loadingState.maxRetries) {
+                showError('Generation timeout, but you can still access available files.');
+                enableDownloadButtons();
+                return;
+            }
+
+            try {
+                // Get item IDs from the files object
+                const itemIds = Object.keys(window.files).join(',');
+                const response = await fetch(`/api/generation-status?items=${itemIds}`);
+                if (!response.ok) throw new Error('Failed to check generation status');
+
+                const status = await response.json();
+
+                // Update progress for each item
+                Object.entries(window.files).forEach(([itemId]) => {
+                    const statusSpan = document.getElementById(`status-${itemId}`);
+                    const progress = Math.round(status.progress_percentage);
+                    statusSpan.innerHTML = `<span class="loading"></span> Generating... ${progress}% complete`;
+                });
+
+                // Check if generation is complete and files are ready
+                if (!status.is_generating && status.files_ready) {
+                    await verifyFiles();
+                    return;
+                }
+
+                // Also check directly for files every few retries
+                if (window.loadingState.retryCount % 3 === 0) {
+                    console.log("Periodically checking for files directly");
+                    await verifyFiles();
+                }
+
+                // If still generating or files not ready, continue checking
+                window.loadingState.retryCount++;
+                window.loadingState.pollInterval = setTimeout(checkGenerationStatus, 2000);
+            } catch (error) {
+                console.error('Error checking generation status:', error);
+                window.loadingState.retryCount++;
+                window.loadingState.pollInterval = setTimeout(checkGenerationStatus, 5000);
+
+                // Try direct verification on error
+                if (!window.loadingState.directVerificationAttempted) {
+                    window.loadingState.directVerificationAttempted = true;
+                    console.log("Status API error - trying direct verification");
+                    await verifyFiles();
+                }
+            }
+        }
+
+        async function verifyFiles() {
+            console.log('Verifying files directly:', window.files);
+
+            // Reset retry count to avoid premature timeout
+            window.loadingState.retryCount = 0;
+
+            let anyFileVerified = false;
+
+            // Try to verify and load content for each file
+            const verificationPromises = Object.entries(window.files).map(async ([itemId, fileSet]) => {
+                try {
+                    console.log(`Checking file content for ${itemId}`);
+
+                    // Check Excel file
+                    const excelResponse = await fetch(`/api/content/${fileSet.excel}`);
+
+                    // Check TXT file
+                    const txtResponse = await fetch(`/api/content/${fileSet.txt}`);
+
+                    // Enable buttons for this item if either file is available
+                    if (excelResponse.ok || txtResponse.ok) {
+                        anyFileVerified = true;
+                        console.log(`File verified for ${itemId} - Excel: ${excelResponse.ok}, TXT: ${txtResponse.ok}`);
+
+                        // Get the buttons
+                        const buttons = document.getElementById(`buttons-${itemId}`);
+                        const txtBtn = document.getElementById(`txt-${itemId}`);
+                        const excelBtn = document.getElementById(`excel-${itemId}`);
+                        const showBtn = document.getElementById(`show-${itemId}`);
+                        const statusSpan = document.getElementById(`status-${itemId}`);
+
+                        // Show available buttons
+                        if (buttons) buttons.style.display = 'flex';
+                        if (txtResponse.ok && txtBtn) txtBtn.style.display = 'inline-block';
+                        if (excelResponse.ok && excelBtn) excelBtn.style.display = 'inline-block';
+                        if (excelResponse.ok && showBtn) showBtn.style.display = 'inline-block';
+                        if (statusSpan) statusSpan.innerHTML = '✓ Complete';
+
+                        // Update header status
+                        updateHeaderStatus(itemId);
+
+                        // Mark as loaded
+                        window.loadingState.loadedFiles.add(itemId);
+                    } else {
+                        console.warn(`File check failed for ${itemId}: Excel(${excelResponse.status}), TXT(${txtResponse.status})`);
+                    }
+                } catch (error) {
+                    console.error(`Error verifying files for ${itemId}:`, error);
+                }
+            });
+
+            // Wait for all verifications to complete
+            await Promise.all(verificationPromises);
+
+            // Show content if any file was verified
+            if (anyFileVerified) {
+                console.log("At least one file was verified successfully, stopping polling");
+                window.loadingState.isGenerating = false;
+                stopPolling();
+            }
+
+            // As a final fallback, always enable download buttons after verification attempts
+            setTimeout(enableDownloadButtons, 500);
+        }
+
+        function showContent() {
+            console.log('Showing content for files:', window.files);
+
+            // First, set the global state to indicate generation is complete
+            window.loadingState.isGenerating = false;
+
+            // Process each file entry
+            Object.entries(window.files).forEach(([itemId, fileSet]) => {
+                // Get the necessary elements by ID
+                const statusSpan = document.getElementById(`status-${itemId}`);
+                const buttons = document.getElementById(`buttons-${itemId}`);
+                const txtBtn = document.getElementById(`txt-${itemId}`);
+                const excelBtn = document.getElementById(`excel-${itemId}`);
+                const showBtn = document.getElementById(`show-${itemId}`);
+
+                try {
+                    // Update the status display
+                    if (statusSpan) statusSpan.innerHTML = '✓ Complete';
+
+                    // Update header status
+                    updateHeaderStatus(itemId);
+
+                    // Show the action buttons if they exist
+                    if (buttons) buttons.style.display = 'flex';
+                    if (txtBtn) txtBtn.style.display = 'inline-block';
+                    if (excelBtn) excelBtn.style.display = 'inline-block';
+                    if (showBtn) showBtn.style.display = 'inline-block';
+
+                    console.log(`Showing buttons for ${itemId}`);
+
+                    // Try to expand the accordion
+                    const accordionButton = document.querySelector(`button[data-bs-target="#collapse${itemId}"]`);
+                    if (accordionButton && accordionButton.classList.contains('collapsed')) {
+                        try {
+                            accordionButton.click();
+                            console.log(`Expanded accordion for ${itemId}`);
+                        } catch (err) {
+                            console.warn(`Could not expand accordion for ${itemId}:`, err);
+                        }
+                    }
+                } catch (error) {
+                    console.error(`Error updating UI for ${itemId}:`, error);
+                }
+            });
+        }
+
+        function showError(message) {
+            Object.entries(window.files).forEach(([itemId]) => {
+                const statusSpan = document.getElementById(`status-${itemId}`);
+                statusSpan.innerHTML = '❌ Error';
+
+                // Add error message but don't completely replace container content
+                const container = document.getElementById(`testCaseTable${itemId}`);
+                if (container.innerHTML.indexOf('alert-danger') === -1) {
+                    container.innerHTML = `<div class="alert alert-danger">${message}</div>` + container.innerHTML;
+                }
+            });
+            window.loadingState.isGenerating = false;
+        }
+
+        async function loadTestCases(filename, targetId, itemId) {
+            console.log(`Loading test cases from ${filename} into ${targetId}`);
+
+            // Get container and button elements
+            const container = document.getElementById(targetId);
+            if (!container) {
+                alert('Error: Could not find container for test cases');
+                return;
+            }
+
+            const button = event.target;
+
+            // Handle toggle if already loaded
+            if (container.dataset.loaded === 'true') {
+                if (container.style.display === 'none') {
+                    container.style.display = 'block';
+                    button.textContent = 'Hide Test Cases';
+                } else {
+                    container.style.display = 'none';
+                    button.textContent = 'Show Test Cases';
+                }
+                return;
+            }
+
+            // Show loading indicator
+            button.disabled = true;
+            container.innerHTML = '<div class="text-center"><span class="loading"></span> Loading test cases...</div>';
+
+            try {
+                // Fetch raw response first
+                const response = await fetch(`/api/content/${filename}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+
+                // Get the text content
+                const text = await response.text();
+
+                // Try to parse as JSON
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (jsonError) {
+                    console.error('JSON parse error:', jsonError);
+                    // If JSON parsing fails, show a fallback view of the raw content
+                    container.innerHTML = `
+                        <div class="alert alert-warning">
+                            <p>Error parsing test case data. Showing raw content instead.</p>
+                        </div>
+                        <pre class="bg-light p-3">${text}</pre>
+                    `;
+                    container.dataset.loaded = 'true';
+                    button.textContent = 'Hide Test Cases';
+                    return;
+                }
+
+                // Handle error in the response
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Display content based on type
+                if (Array.isArray(data.content)) {
+                    if (data.content.length > 0) {
+                        try {
+                            const table = createTestCaseTable(data.content);
+                            container.innerHTML = '';
+                            container.appendChild(table);
+                        } catch (tableError) {
+                            console.error('Error creating table:', tableError);
+                            // If table creation fails, show the raw data
+                            container.innerHTML = `
+                                <div class="alert alert-warning">
+                                    <p>Error displaying test case table. Showing raw data instead.</p>
+                                </div>
+                                <pre class="bg-light p-3">${JSON.stringify(data.content, null, 2)}</pre>
+                            `;
+                        }
+                    } else {
+                        container.innerHTML = '<div class="alert alert-info">No test cases found in the file.</div>';
+                    }
+                } else {
+                    // Handle text content
+                    if (data.content) {
+                        container.innerHTML = `<pre class="bg-light p-3">${data.content}</pre>`;
+                    } else {
+                        container.innerHTML = '<div class="alert alert-info">No content found in the file.</div>';
+                    }
+                }
+
+                // Mark as loaded and update button
+                container.dataset.loaded = 'true';
+                button.textContent = 'Hide Test Cases';
+
+            } catch (error) {
+                console.error(`Error loading test cases:`, error);
+                container.innerHTML = `
+                    <div class="alert alert-danger">
+                        <p>Failed to load test cases: ${error.message}</p>
+                        <p>You can still download the files using the download buttons above.</p>
+                    </div>
+                `;
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        function createTestCaseTable(content) {
+            try {
                 const desiredOrder = ['Title', 'Scenario', 'Steps', 'Expected Result'];
                 const table = document.createElement('table');
                 table.className = 'table table-striped table-bordered';
-                
-                // Add headers in desired order
+
+                // Create table header
                 const thead = document.createElement('thead');
                 thead.innerHTML = `
                     <tr>
@@ -136,25 +454,84 @@
                 `;
                 table.appendChild(thead);
 
-                // Add data rows in desired order
+                // Create table body
                 const tbody = document.createElement('tbody');
-                tbody.innerHTML = data.content.map(row => `
-                    <tr>
-                        ${desiredOrder.map(header => `<td>${row[header] || ''}</td>`).join('')}
-                    </tr>
-                `).join('');
-                table.appendChild(tbody);
 
-                container.innerHTML = '';
-                container.appendChild(table);
-            } else {
-                container.innerHTML = `<pre class="bg-light p-3">${data.content}</pre>`;
+                // Check if content is valid
+                if (!Array.isArray(content)) {
+                    throw new Error('Table content is not an array');
+                }
+
+                // Process each row
+                content.forEach((row, index) => {
+                    if (!row || typeof row !== 'object') {
+                        console.warn(`Row ${index} is not a valid object, skipping`);
+                        return;
+                    }
+
+                    const tr = document.createElement('tr');
+
+                    // Process each column in desired order
+                    desiredOrder.forEach(header => {
+                        const td = document.createElement('td');
+                        const value = row[header];
+
+                        // Handle different value types
+                        if (value === null || value === undefined) {
+                            td.innerHTML = '<em>Not provided</em>';
+                        } else if (typeof value === 'object') {
+                            try {
+                                td.innerHTML = JSON.stringify(value);
+                            } catch (e) {
+                                td.innerHTML = '<em>Complex value</em>';
+                            }
+                        } else {
+                            td.textContent = String(value);
+                        }
+
+                        tr.appendChild(td);
+                    });
+
+                    tbody.appendChild(tr);
+                });
+
+                table.appendChild(tbody);
+                return table;
+            } catch (error) {
+                console.error('Error creating test case table:', error);
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'alert alert-danger';
+                errorDiv.textContent = 'Error creating table: ' + error.message;
+                return errorDiv;
             }
-        } catch (error) {
-            container.innerHTML = `<div class="alert alert-danger">Error loading test cases: ${error.message}</div>`;
-            button.textContent = 'Show Test Cases';
         }
-    }
+
+        // Function to directly enable download buttons, regardless of other status
+        function enableDownloadButtons() {
+            console.log('Enabling all download buttons directly');
+            Object.entries(window.files).forEach(([itemId, fileSet]) => {
+                const buttons = document.getElementById(`buttons-${itemId}`);
+                const txtBtn = document.getElementById(`txt-${itemId}`);
+                const excelBtn = document.getElementById(`excel-${itemId}`);
+                const showBtn = document.getElementById(`show-${itemId}`);
+                const statusSpan = document.getElementById(`status-${itemId}`);
+
+                if (buttons) buttons.style.display = 'flex';
+                if (txtBtn) txtBtn.style.display = 'inline-block';
+                if (excelBtn) excelBtn.style.display = 'inline-block';
+                if (showBtn) showBtn.style.display = 'inline-block';
+                if (statusSpan) statusSpan.innerHTML = '✓ Files Ready';
+            });
+        }
+
+        // Update header status after content is loaded
+        function updateHeaderStatus(itemId) {
+            const headerStatus = document.querySelector(`#heading${itemId} button span`);
+            if (headerStatus) {
+                headerStatus.innerHTML = '✓ Complete';
+            }
+        }
     </script>
 </body>
+
 </html>
