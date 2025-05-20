@@ -12,4 +12,5 @@
 /config/__pycache__/
 /azure_integration/__pycache__/
 /app.log
-tests/images/
+/images/__pycache__/
+/images/
