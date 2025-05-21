@@ -23,7 +23,8 @@
         .table-container {
             overflow-x: auto;
             padding-bottom: 2rem;
-            margin-bottom: 0.20rem;;
+            margin-bottom: 0.20rem;
+            ;
         }
 
         .accordion-body {
@@ -244,14 +245,14 @@
 
                         // Show all buttons container
                         if (buttons) buttons.style.display = 'flex';
-                        
+
                         // Show individual buttons based on file availability
                         if (txtResponse.ok && txtBtn) txtBtn.style.display = 'inline-block';
                         if (excelResponse.ok && excelBtn) excelBtn.style.display = 'inline-block';
                         if (excelResponse.ok && showBtn) showBtn.style.display = 'inline-block';
                         if (excelResponse.ok && copyBtn) copyBtn.style.display = 'inline-block';
                         if (excelResponse.ok && shareBtn) shareBtn.style.display = 'inline-block';
-                        
+
                         if (statusSpan) statusSpan.innerHTML = '✓ Complete';
                     }
                 } catch (error) {
@@ -518,63 +519,65 @@
 </html>
 
 <script>
-async function copyTestCaseUrl(itemId) {
-    try {
-        const response = await fetch('/api/share', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                test_data: window.testCases[itemId]
-            })
-        });
-        
-        const data = await response.json();
-        if (data.success) {
-            await navigator.clipboard.writeText(data.share_url);
-            alert('URL copied to clipboard!');
-        } else {
-            alert('Failed to generate URL');
-        }
-    } catch (error) {
-        console.error('Error generating URL:', error);
-        alert('Error generating URL');
-    }
-}
+    async function copyTestCaseUrl(itemId) {
+        try {
+            const response = await fetch('/api/share', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    test_data: window.testCases[itemId],
+                    item_id: itemId
+                })
+            });
 
-async function shareTestCase(itemId) {
-    try {
-        const response = await fetch('/api/share', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                test_data: window.testCases[itemId]
-            })
-        });
-        
-        const data = await response.json();
-        if (data.success) {
-            // Open share dialog if supported
-            if (navigator.share) {
-                await navigator.share({
-                    title: 'Test Cases',
-                    text: `Test Cases for ${itemId}`,
-                    url: data.share_url
-                });
-            } else {
-                // Fallback to copying to clipboard
+            const data = await response.json();
+            if (data.success) {
                 await navigator.clipboard.writeText(data.share_url);
-                alert('Share URL copied to clipboard!');
+                alert('URL copied to clipboard!');
+            } else {
+                alert('Failed to generate URL');
             }
-        } else {
-            alert('Failed to generate share URL');
+        } catch (error) {
+            console.error('Error generating URL:', error);
+            alert('Error generating URL');
         }
-    } catch (error) {
-        console.error('Error sharing test case:', error);
-        alert('Error sharing test case');
     }
-}
+
+    async function shareTestCase(itemId) {
+        try {
+            const response = await fetch('/api/share', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    test_data: window.testCases[itemId],
+                    item_id: itemId
+                })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                // Open share dialog if supported
+                if (navigator.share) {
+                    await navigator.share({
+                        title: 'Test Cases',
+                        text: `Test Cases for ${itemId}`,
+                        url: data.share_url
+                    });
+                } else {
+                    // Fallback to copying to clipboard
+                    await navigator.clipboard.writeText(data.share_url);
+                    alert('Share URL copied to clipboard!');
+                }
+            } else {
+                alert('Failed to generate share URL');
+            }
+        } catch (error) {
+            console.error('Error sharing test case:', error);
+            alert('Error sharing test case');
+        }
+    }
 </script>

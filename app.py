@@ -431,10 +431,11 @@ def share_test_case():
     try:
         data = request.json
         test_data = data.get('test_data')
+        item_id = data.get('item_id')
         if not test_data:
             return jsonify({'error': 'No test data provided'}), 400
 
-        url_key = mongo_handler.save_test_case(test_data)
+        url_key = mongo_handler.save_test_case(test_data, item_id)
         share_url = f"{request.host_url}view/{url_key}"
         
         return jsonify({
@@ -450,6 +451,64 @@ def view_shared_test_case(url_key):
     if not test_case:
         return render_template('404.html'), 404
     return render_template('view.html', test_case=test_case)
+
+@app.route('/api/shared/excel/<url_key>')
+def download_shared_excel(url_key):
+    try:
+        # Get the test case data from MongoDB
+        test_case = mongo_handler.get_test_case(url_key)
+        if not test_case:
+            return jsonify({'error': 'Test case not found'}), 404
+        
+        # Generate filename based on item_id or use generic name
+        if test_case.get('item_id'):
+            file_base_name = f"test_{test_case['item_id']}"
+        else:
+            file_base_name = f"test_shared_{url_key[:8]}"
+        
+        # Format test data properly for Excel generation
+        test_data = test_case['test_data']
+        
+        # If test_data is already in array format, format it for Excel
+        if isinstance(test_data, list):
+            import json
+            formatted_data = ""
+            
+            for tc in test_data:
+                formatted_data += "TEST CASE:\n"
+                if 'Title' in tc:
+                    formatted_data += f"Title: {tc.get('Title', '')}\n"
+                if 'Scenario' in tc:
+                    formatted_data += f"Scenario: {tc.get('Scenario', '')}\n"
+                if 'Steps' in tc:
+                    steps = tc.get('Steps', '')
+                    if isinstance(steps, list):
+                        formatted_data += "Steps:\n" + "\n".join([f"- {step}" for step in steps])
+                    else:
+                        formatted_data += f"Steps: {steps}\n"
+                if 'Expected Result' in tc:
+                    formatted_data += f"Expected Result: {tc.get('Expected Result', '')}\n"
+                formatted_data += "\n\n"
+            
+            test_data_str = formatted_data
+        else:
+            # Convert test data to string if it's in other JSON format
+            import json
+            test_data_str = json.dumps(test_data, indent=2)
+        
+        # Generate Excel file
+        from utils.file_handler import save_excel_report
+        excel_file = save_excel_report(test_data_str, file_base_name)
+        
+        if not excel_file:
+            return jsonify({'error': 'Failed to generate Excel file'}), 500
+        
+        # Return the Excel file
+        file_path = os.path.join(os.path.dirname(__file__), 'tests', 'generated', excel_file)
+        return send_file(file_path, as_attachment=True)
+    except Exception as e:
+        logger.error(f"Error generating Excel file: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

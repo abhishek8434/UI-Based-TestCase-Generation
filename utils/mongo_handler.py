@@ -20,7 +20,7 @@ class MongoHandler:
             logger.error(f"Failed to connect to MongoDB: {str(e)}")
             raise Exception("Could not connect to MongoDB. Please check your connection settings.")
 
-    def save_test_case(self, test_data):
+    def save_test_case(self, test_data, item_id=None):
         """Save test case data and generate unique URL"""
         try:
             unique_id = str(uuid.uuid4())
@@ -28,7 +28,8 @@ class MongoHandler:
                 "_id": unique_id,
                 "test_data": test_data,
                 "created_at": datetime.utcnow(),
-                "url_key": unique_id
+                "url_key": unique_id,
+                "item_id": item_id
             }
             self.collection.insert_one(document)
             logger.info(f"Successfully saved test case with ID: {unique_id}")
