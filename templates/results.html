@@ -103,10 +103,12 @@
                 <div id="collapse${itemId}" class="accordion-collapse collapse" aria-labelledby="heading${itemId}" data-bs-parent="#testCasesList">
                     <div class="accordion-body">
                         <div class="mb-3">
-                            <div class="btn-group" id="buttons-${itemId}" style="display: none;">
-                                <a href="/api/download/${fileSet.txt}" class="btn btn-primary" style="display: none;" id="txt-${itemId}">Download TXT</a>
-                                <a href="/api/download/${fileSet.excel}" class="btn btn-success" style="display: none;" id="excel-${itemId}">Download Excel</a>
-                                <button class="btn btn-info" style="display: none;" id="show-${itemId}" onclick="loadTestCases('${fileSet.excel}', 'testCaseTable${itemId}', '${itemId}')">Show Test Cases</button>
+                            <div class="btn-group d-flex gap-2" id="buttons-${itemId}">
+                                <a href="/api/download/${fileSet.txt}" class="btn btn-primary" id="txt-${itemId}">Download TXT</a>
+                                <a href="/api/download/${fileSet.excel}" class="btn btn-success" id="excel-${itemId}">Download Excel</a>
+                                <button class="btn btn-info" id="show-${itemId}" onclick="loadTestCases('${itemId}', this)">Show Test Cases</button>
+                                <button class="btn btn-secondary" id="copy-${itemId}" onclick="copyTestCaseUrl('${itemId}')">Copy URL</button>
+                                <button class="btn btn-primary" id="share-${itemId}" onclick="shareTestCase('${itemId}')">Share URL</button>
                             </div>
                         </div>
                         <div id="testCaseTable${itemId}" class="table-container">
@@ -227,31 +229,30 @@
                     const txtResponse = await fetch(`/api/content/${fileSet.txt}`);
 
                     // Enable buttons for this item if either file is available
+                    // In the verifyFiles function, update the button display code:
                     if (excelResponse.ok || txtResponse.ok) {
                         anyFileVerified = true;
                         console.log(`File verified for ${itemId} - Excel: ${excelResponse.ok}, TXT: ${txtResponse.ok}`);
 
-                        // Get the buttons
                         const buttons = document.getElementById(`buttons-${itemId}`);
                         const txtBtn = document.getElementById(`txt-${itemId}`);
                         const excelBtn = document.getElementById(`excel-${itemId}`);
                         const showBtn = document.getElementById(`show-${itemId}`);
+                        const copyBtn = document.getElementById(`copy-${itemId}`);
+                        const shareBtn = document.getElementById(`share-${itemId}`);
                         const statusSpan = document.getElementById(`status-${itemId}`);
 
-                        // Show available buttons
+                        // Show all buttons container
                         if (buttons) buttons.style.display = 'flex';
+                        
+                        // Show individual buttons based on file availability
                         if (txtResponse.ok && txtBtn) txtBtn.style.display = 'inline-block';
                         if (excelResponse.ok && excelBtn) excelBtn.style.display = 'inline-block';
                         if (excelResponse.ok && showBtn) showBtn.style.display = 'inline-block';
+                        if (excelResponse.ok && copyBtn) copyBtn.style.display = 'inline-block';
+                        if (excelResponse.ok && shareBtn) shareBtn.style.display = 'inline-block';
+                        
                         if (statusSpan) statusSpan.innerHTML = '✓ Complete';
-
-                        // Update header status
-                        updateHeaderStatus(itemId);
-
-                        // Mark as loaded
-                        window.loadingState.loadedFiles.add(itemId);
-                    } else {
-                        console.warn(`File check failed for ${itemId}: Excel(${excelResponse.status}), TXT(${txtResponse.status})`);
                     }
                 } catch (error) {
                     console.error(`Error verifying files for ${itemId}:`, error);
@@ -332,17 +333,15 @@
             window.loadingState.isGenerating = false;
         }
 
-        async function loadTestCases(filename, targetId, itemId) {
-            console.log(`Loading test cases from ${filename} into ${targetId}`);
+        async function loadTestCases(itemId, button) {
+            console.log(`Loading test cases for ${itemId}`);
 
-            // Get container and button elements
-            const container = document.getElementById(targetId);
+            // Get container and verify files exist
+            const container = document.getElementById(`testCaseTable${itemId}`);
             if (!container) {
                 alert('Error: Could not find container for test cases');
                 return;
             }
-
-            const button = event.target;
 
             // Handle toggle if already loaded
             if (container.dataset.loaded === 'true') {
@@ -361,37 +360,22 @@
             container.innerHTML = '<div class="text-center"><span class="loading"></span> Loading test cases...</div>';
 
             try {
-                // Fetch raw response first
-                const response = await fetch(`/api/content/${filename}`);
+                // Fetch test cases using the correct file path
+                const response = await fetch(`/api/content/${window.files[itemId].excel}`);
                 if (!response.ok) {
                     throw new Error(`HTTP error ${response.status}`);
                 }
 
-                // Get the text content
-                const text = await response.text();
-
-                // Try to parse as JSON
-                let data;
-                try {
-                    data = JSON.parse(text);
-                } catch (jsonError) {
-                    console.error('JSON parse error:', jsonError);
-                    // If JSON parsing fails, show a fallback view of the raw content
-                    container.innerHTML = `
-                        <div class="alert alert-warning">
-                            <p>Error parsing test case data. Showing raw content instead.</p>
-                        </div>
-                        <pre class="bg-light p-3">${text}</pre>
-                    `;
-                    container.dataset.loaded = 'true';
-                    button.textContent = 'Hide Test Cases';
-                    return;
-                }
+                const data = await response.json();
 
                 // Handle error in the response
                 if (data.error) {
                     throw new Error(data.error);
                 }
+
+                // Store test cases for sharing
+                if (!window.testCases) window.testCases = {};
+                window.testCases[itemId] = data.content;
 
                 // Display content based on type
                 if (Array.isArray(data.content)) {
@@ -402,7 +386,6 @@
                             container.appendChild(table);
                         } catch (tableError) {
                             console.error('Error creating table:', tableError);
-                            // If table creation fails, show the raw data
                             container.innerHTML = `
                                 <div class="alert alert-warning">
                                     <p>Error displaying test case table. Showing raw data instead.</p>
@@ -413,19 +396,17 @@
                     } else {
                         container.innerHTML = '<div class="alert alert-info">No test cases found in the file.</div>';
                     }
-                } else {
-                    // Handle text content
-                    if (data.content) {
-                        container.innerHTML = `<pre class="bg-light p-3">${data.content}</pre>`;
-                    } else {
-                        container.innerHTML = '<div class="alert alert-info">No content found in the file.</div>';
-                    }
                 }
+
+                // Show copy and share buttons
+                const copyBtn = document.getElementById(`copy-${itemId}`);
+                const shareBtn = document.getElementById(`share-${itemId}`);
+                if (copyBtn) copyBtn.style.display = 'inline-block';
+                if (shareBtn) shareBtn.style.display = 'inline-block';
 
                 // Mark as loaded and update button
                 container.dataset.loaded = 'true';
                 button.textContent = 'Hide Test Cases';
-
             } catch (error) {
                 console.error(`Error loading test cases:`, error);
                 container.innerHTML = `
@@ -535,3 +516,65 @@
 </body>
 
 </html>
+
+<script>
+async function copyTestCaseUrl(itemId) {
+    try {
+        const response = await fetch('/api/share', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                test_data: window.testCases[itemId]
+            })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            await navigator.clipboard.writeText(data.share_url);
+            alert('URL copied to clipboard!');
+        } else {
+            alert('Failed to generate URL');
+        }
+    } catch (error) {
+        console.error('Error generating URL:', error);
+        alert('Error generating URL');
+    }
+}
+
+async function shareTestCase(itemId) {
+    try {
+        const response = await fetch('/api/share', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                test_data: window.testCases[itemId]
+            })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            // Open share dialog if supported
+            if (navigator.share) {
+                await navigator.share({
+                    title: 'Test Cases',
+                    text: `Test Cases for ${itemId}`,
+                    url: data.share_url
+                });
+            } else {
+                // Fallback to copying to clipboard
+                await navigator.clipboard.writeText(data.share_url);
+                alert('Share URL copied to clipboard!');
+            }
+        } else {
+            alert('Failed to generate share URL');
+        }
+    } catch (error) {
+        console.error('Error sharing test case:', error);
+        alert('Error sharing test case');
+    }
+}
+</script>

@@ -8,3 +8,4 @@ Pillow
 flask
 flask-cors
 openpyxl
+pymongo

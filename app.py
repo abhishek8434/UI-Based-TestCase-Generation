@@ -6,6 +6,7 @@ from ai.generator import generate_test_case
 from utils.file_handler import save_test_script, save_excel_report
 import os
 import logging
+from utils.mongo_handler import MongoHandler
 
 app = Flask(__name__)
 CORS(app)
@@ -421,6 +422,34 @@ def check_generation_status():
             'error': str(e),
             'files_ready': False
         }), 500
+
+# Initialize MongoDB handler
+mongo_handler = MongoHandler()
+
+@app.route('/api/share', methods=['POST'])
+def share_test_case():
+    try:
+        data = request.json
+        test_data = data.get('test_data')
+        if not test_data:
+            return jsonify({'error': 'No test data provided'}), 400
+
+        url_key = mongo_handler.save_test_case(test_data)
+        share_url = f"{request.host_url}view/{url_key}"
+        
+        return jsonify({
+            'success': True,
+            'share_url': share_url
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/view/<url_key>')
+def view_shared_test_case(url_key):
+    test_case = mongo_handler.get_test_case(url_key)
+    if not test_case:
+        return render_template('404.html'), 404
+    return render_template('view.html', test_case=test_case)
 
 if __name__ == '__main__':
     app.run(debug=True)

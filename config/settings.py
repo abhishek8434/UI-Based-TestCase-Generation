@@ -39,3 +39,8 @@ missing_vars = [name for name, value in zip([
 
 if missing_vars:
     raise EnvironmentError(f"⚠️ Missing environment variables: {', '.join(missing_vars)}")
+
+
+# MongoDB settings
+MONGODB_URI = os.getenv("MONGODB_URI", "")
+MONGODB_DB = os.getenv("MONGODB_DB", "")
