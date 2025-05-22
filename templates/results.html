@@ -108,6 +108,7 @@
                                 <a href="/api/download/${fileSet.txt}" class="btn btn-primary" id="txt-${itemId}">Download TXT</a>
                                 <a href="/api/download/${fileSet.excel}" class="btn btn-success" id="excel-${itemId}">Download Excel</a>
                                 <button class="btn btn-info" id="show-${itemId}" onclick="loadTestCases('${itemId}', this)">Show Test Cases</button>
+                                <button class="btn btn-warning" id="copy-table-${itemId}" onclick="copyTestCaseTable('${itemId}')">Copy Table</button>
                                 <button class="btn btn-secondary" id="copy-${itemId}" onclick="copyTestCaseUrl('${itemId}')">Copy URL</button>
                                 <button class="btn btn-primary" id="share-${itemId}" onclick="shareTestCase('${itemId}')">Share URL</button>
                             </div>
@@ -578,6 +579,84 @@
         } catch (error) {
             console.error('Error sharing test case:', error);
             alert('Error sharing test case');
+        }
+    }
+
+    async function copyTestCaseTable(itemId) {
+        const container = document.getElementById(`testCaseTable${itemId}`);
+        if (!container) {
+            alert('Error: Could not find test case container');
+            return;
+        }
+
+        // If test cases haven't been loaded yet, load them
+        if (container.dataset.loaded !== 'true') {
+            const showButton = document.getElementById(`show-${itemId}`);
+            if (showButton) {
+                await loadTestCases(itemId, showButton);
+            }
+        }
+
+        // Use the original test data instead of parsing the table
+        const testData = window.testCases[itemId];
+        if (!testData || !Array.isArray(testData) || testData.length === 0) {
+            alert('No valid test case data found');
+            return;
+        }
+
+        const desiredOrder = ['Title', 'Scenario', 'Steps', 'Expected Result'];
+        let copyText = '';
+
+        // Add headers
+        copyText = desiredOrder.join('\t') + '\n';
+
+        // Process each test case
+        testData.forEach(testCase => {
+            const row = desiredOrder.map(header => {
+                let value = testCase[header];
+                
+                // Handle null or undefined values
+                if (value === null || value === undefined) {
+                    return 'Not provided';
+                }
+                
+                // Handle Steps field specially
+                if (header === 'Steps' && Array.isArray(value)) {
+                    return value.map((step, index) => `${index + 1}. ${step}`).join('\n');
+                }
+                
+                // Handle objects
+                if (typeof value === 'object') {
+                    try {
+                        value = JSON.stringify(value);
+                    } catch (e) {
+                        value = 'Complex value';
+                    }
+                }
+                
+                // Clean up the value - replace tabs and newlines
+                return String(value).replace(/\t/g, ' ').replace(/\n/g, ' ');
+            });
+            copyText += row.join('\t') + '\n';
+        });
+
+        try {
+            await navigator.clipboard.writeText(copyText);
+            
+            // Show feedback
+            const copyBtn = document.getElementById(`copy-${itemId}`);
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = 'Copied!';
+            copyBtn.classList.remove('btn-warning');
+            copyBtn.classList.add('btn-success');
+            
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+                copyBtn.classList.remove('btn-success');
+                copyBtn.classList.add('btn-warning');
+            }, 2000);
+        } catch (err) {
+            alert('Failed to copy test cases: ' + err.message);
         }
     }
 </script>
