@@ -25,22 +25,33 @@ This project automates the generation of detailed Selenium test cases in Python 
 ## Project Structure
 
 ```tree
-├── .env                  # Environment variables
-├── .gitignore            # Git ignore file
-├── README.md             # Project documentation
-├── app.py               # Flask application
-├── requirements.txt      # Python dependencies
-├── ai/                  # AI integration
-│   ├── generator.py     # Test case generation
-│   └── image_generator.py # Image processing
-├── azure_integration/   # Azure DevOps integration
-├── config/              # Configuration
-├── jira/                # Jira integration
-├── templates/           # HTML templates
-├── tests/               # Test cases
-│   ├── generated/       # Generated test cases
-│   └── images/          # Uploaded images
-└── utils/               # Utility functions
+├── .env                    # Environment variables
+├── .gitignore              # Git ignore file
+├── README.md               # Project documentation
+├── app.py                  # Flask application
+├── requirements.txt        # Python dependencies
+├── ai/                     # AI integration
+│   ├── generator.py        # Test case generation
+│   └── image_generator.py  # Image processing
+├── azure_integration/      # Azure DevOps integration
+│   ├── __init__.py         # Azure integration module
+│   ├── azure_client.py     # Azure client
+│   └── pipeline.py         # Azure pipeline
+├── config/                 # Configuration
+│   └── settings.py         # Configuration settings
+├── jira/                   # Jira integration
+│   └── jira_client.py      # Jira client
+├── templates/              # HTML templates
+│   ├── index.html          # Main page
+│   ├── results.html        # Result page
+│   └── view.html           # View page
+├── tests/                  # Test cases
+│   ├── generated/          # Generated test cases
+│   └── images/             # Uploaded images
+├── utils/                  # Utility functions
+│   ├── file_handler.py     # File handling utilities
+│   ├── logger.py           # Logging utility
+│   └── mongo_handler.py    # MongoDB utility
 ```
 
 
@@ -61,6 +72,7 @@ This project automates the generation of detailed Selenium test cases in Python 
 - **Pillow**: Image processing for image-based test case generation
 - **flask**: Web application framework
 - **openpyxl**: Excel file handling
+- **pymongo**: MongoDB driver for Python
 
 ### Built-in Libraries Used
 
@@ -74,6 +86,11 @@ This project automates the generation of detailed Selenium test cases in Python 
 
 #### For OpenAI
 - `OPENAI_API_KEY`: Your OpenAI API key
+
+#### For MongoDB
+- `MONGO_URI`: MongoDB connection URI
+- `MONGO_DB`: MongoDB database name
+- `MONGO_COLLECTION`: MongoDB collection name
 
 #### For Jira Integration
 - `JIRA_URL`: Your Jira instance URL

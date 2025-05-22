@@ -114,6 +114,7 @@
                 icon.classList.remove('bi-eye');
                 icon.classList.add('bi-eye-slash');
                 this.innerHTML = '<i class="bi bi-eye-slash"></i> Show Test Cases';
+                
             }
         });
 
@@ -197,7 +198,35 @@
 
         // Download TXT
         txtBtn.addEventListener('click', function () {
-            const content = JSON.stringify(testData, null, 2);
+            if (!Array.isArray(testData)) {
+                alert('No valid test case data found');
+                return;
+            }
+
+            let content = 'TEST TYPE: dashboard_functional\n\n';
+
+            // Process each test case
+            testData.forEach((testCase, index) => {
+                if (index > 0) content += '\n'; // Add extra line between test cases
+
+                content += `Title: ${testCase.Title}\n\n`;
+                content += `Scenario: ${testCase.Scenario}\n\n`;
+                content += 'Steps to reproduce:\n\n';
+
+                // Handle Steps field
+                if (Array.isArray(testCase.Steps)) {
+                    testCase.Steps.forEach((step, stepIndex) => {
+                        content += `${stepIndex + 1}. ${step}\n\n`;
+                    });
+                } else {
+                    content += `1. ${testCase.Steps}\n\n`;
+                }
+
+                content += `Expected Result: ${testCase['Expected Result']}\n\n`;
+                content += `Actual Result: [To be filled during execution]\n\n`;
+                content += `Priority: ${testCase.Priority || 'Not specified'}\n`;
+            });
+
             downloadFile(content, 'test_cases.txt', 'text/plain');
         });
 
