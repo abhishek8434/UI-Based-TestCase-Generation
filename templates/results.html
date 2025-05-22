@@ -643,8 +643,8 @@
         try {
             await navigator.clipboard.writeText(copyText);
             
-            // Show feedback
-            const copyBtn = document.getElementById(`copy-${itemId}`);
+            // Show feedback on the correct button
+            const copyBtn = document.getElementById(`copy-table-${itemId}`); // Fixed button ID
             const originalText = copyBtn.textContent;
             copyBtn.textContent = 'Copied!';
             copyBtn.classList.remove('btn-warning');
