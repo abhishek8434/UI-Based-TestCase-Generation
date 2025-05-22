@@ -462,6 +462,12 @@
                         // Handle different value types
                         if (value === null || value === undefined) {
                             td.innerHTML = '<em>Not provided</em>';
+                        } else if (Array.isArray(value)) {
+                            // Format array of steps as numbered list
+                            const listHtml = value.map((step, idx) =>
+                                `<div>${idx + 1}. ${step}</div>`
+                            ).join('');
+                            td.innerHTML = listHtml;
                         } else if (typeof value === 'object') {
                             try {
                                 td.innerHTML = JSON.stringify(value);
@@ -469,7 +475,7 @@
                                 td.innerHTML = '<em>Complex value</em>';
                             }
                         } else {
-                            td.textContent = String(value);
+                            td.innerHTML = String(value).replace(/\n/g, '<br>');
                         }
 
                         tr.appendChild(td);
@@ -522,6 +528,31 @@
 <script>
     async function copyTestCaseUrl(itemId) {
         try {
+            // Make sure test cases are loaded first
+            if (!window.testCases || !window.testCases[itemId]) {
+                // Show loading indicator
+                const copyBtn = document.getElementById(`copy-${itemId}`);
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = 'Loading...';
+                copyBtn.disabled = true;
+
+                // Fetch test cases data if not already loaded
+                const response = await fetch(`/api/content/${window.files[itemId].excel}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Store test cases for sharing
+                if (!window.testCases) window.testCases = {};
+                window.testCases[itemId] = data.content;
+
+                // Restore button state
+                copyBtn.textContent = originalText;
+                copyBtn.disabled = false;
+            }
+
             const response = await fetch('/api/share', {
                 method: 'POST',
                 headers: {
@@ -536,18 +567,50 @@
             const data = await response.json();
             if (data.success) {
                 await navigator.clipboard.writeText(data.share_url);
-                alert('URL copied to clipboard!');
+
+                // Show feedback
+                const copyBtn = document.getElementById(`copy-${itemId}`);
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = 'URL Copied!';
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                }, 2000);
             } else {
-                alert('Failed to generate URL');
+                alert('Failed to generate URL: ' + (data.error || 'Unknown error'));
             }
         } catch (error) {
             console.error('Error generating URL:', error);
-            alert('Error generating URL');
+            alert('Error generating URL: ' + error.message);
         }
     }
 
     async function shareTestCase(itemId) {
         try {
+            // Make sure test cases are loaded first
+            if (!window.testCases || !window.testCases[itemId]) {
+                // Show loading indicator
+                const shareBtn = document.getElementById(`share-${itemId}`);
+                const originalText = shareBtn.textContent;
+                shareBtn.textContent = 'Loading...';
+                shareBtn.disabled = true;
+
+                // Fetch test cases data if not already loaded
+                const response = await fetch(`/api/content/${window.files[itemId].excel}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Store test cases for sharing
+                if (!window.testCases) window.testCases = {};
+                window.testCases[itemId] = data.content;
+
+                // Restore button state
+                shareBtn.textContent = originalText;
+                shareBtn.disabled = false;
+            }
+
             const response = await fetch('/api/share', {
                 method: 'POST',
                 headers: {
@@ -571,14 +634,21 @@
                 } else {
                     // Fallback to copying to clipboard
                     await navigator.clipboard.writeText(data.share_url);
-                    alert('Share URL copied to clipboard!');
+
+                    // Show feedback
+                    const shareBtn = document.getElementById(`share-${itemId}`);
+                    const originalText = shareBtn.textContent;
+                    shareBtn.textContent = 'URL Copied!';
+                    setTimeout(() => {
+                        shareBtn.textContent = originalText;
+                    }, 2000);
                 }
             } else {
-                alert('Failed to generate share URL');
+                alert('Failed to generate share URL: ' + (data.error || 'Unknown error'));
             }
         } catch (error) {
             console.error('Error sharing test case:', error);
-            alert('Error sharing test case');
+            alert('Error sharing test case: ' + error.message);
         }
     }
 
@@ -614,17 +684,17 @@
         testData.forEach(testCase => {
             const row = desiredOrder.map(header => {
                 let value = testCase[header];
-                
+
                 // Handle null or undefined values
                 if (value === null || value === undefined) {
                     return 'Not provided';
                 }
-                
+
                 // Handle Steps field specially
                 if (header === 'Steps' && Array.isArray(value)) {
                     return value.map((step, index) => `${index + 1}. ${step}`).join('\n');
                 }
-                
+
                 // Handle objects
                 if (typeof value === 'object') {
                     try {
@@ -633,7 +703,7 @@
                         value = 'Complex value';
                     }
                 }
-                
+
                 // Clean up the value - replace tabs and newlines
                 return String(value).replace(/\t/g, ' ').replace(/\n/g, ' ');
             });
@@ -642,14 +712,14 @@
 
         try {
             await navigator.clipboard.writeText(copyText);
-            
+
             // Show feedback on the correct button
             const copyBtn = document.getElementById(`copy-table-${itemId}`); // Fixed button ID
             const originalText = copyBtn.textContent;
             copyBtn.textContent = 'Copied!';
             copyBtn.classList.remove('btn-warning');
             copyBtn.classList.add('btn-success');
-            
+
             setTimeout(() => {
                 copyBtn.textContent = originalText;
                 copyBtn.classList.remove('btn-success');

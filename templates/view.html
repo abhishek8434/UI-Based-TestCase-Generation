@@ -79,7 +79,7 @@
                         {% endif %} -->
                     </button>
                 </h2>
-                
+
                 <div id="collapseTestCase" class="accordion-collapse collapse show">
                     <div class="accordion-body">
                         <div class="table-container" id="testCaseTable">
@@ -114,7 +114,7 @@
                 icon.classList.remove('bi-eye');
                 icon.classList.add('bi-eye-slash');
                 this.innerHTML = '<i class="bi bi-eye-slash"></i> Show Test Cases';
-                
+
             }
         });
 
@@ -129,7 +129,7 @@
 
                 const desiredOrder = ['Title', 'Scenario', 'Steps', 'Expected Result'];
                 let copyText = '';
-                
+
                 // Add headers
                 copyText += desiredOrder.join('\t') + '\n';
 
@@ -137,12 +137,12 @@
                 testData.forEach(row => {
                     const rowData = desiredOrder.map(header => {
                         let value = row[header];
-                        
+
                         // Special handling for Steps field which might be an array
                         if (header === 'Steps' && Array.isArray(value)) {
                             value = value.map((step, index) => `${index + 1}. ${step}`).join('\n');
                         }
-                        
+
                         if (value === null || value === undefined) {
                             return 'Not provided';
                         } else if (typeof value === 'object' && !Array.isArray(value)) {
@@ -158,13 +158,13 @@
                 });
 
                 await navigator.clipboard.writeText(copyText);
-                
+
                 // Show feedback
                 const originalText = this.innerHTML;
                 this.innerHTML = '<i class="bi bi-clipboard-check"></i> Copied!';
                 this.classList.remove('btn-success');
                 this.classList.add('btn-info');
-                
+
                 setTimeout(() => {
                     this.innerHTML = originalText;
                     this.classList.remove('btn-info');
@@ -209,20 +209,29 @@
             testData.forEach((testCase, index) => {
                 if (index > 0) content += '\n'; // Add extra line between test cases
 
-                content += `Title: ${testCase.Title}\n\n`;
-                content += `Scenario: ${testCase.Scenario}\n\n`;
+                content += `Title: ${testCase.Title || ''}\n\n`;
+                content += `Scenario: ${testCase.Scenario || ''}\n\n`;
                 content += 'Steps to reproduce:\n\n';
 
-                // Handle Steps field
-                if (Array.isArray(testCase.Steps)) {
-                    testCase.Steps.forEach((step, stepIndex) => {
-                        content += `${stepIndex + 1}. ${step}\n\n`;
-                    });
+                // Handle Steps field with special care for different formats
+                if (testCase.Steps) {
+                    if (Array.isArray(testCase.Steps)) {
+                        testCase.Steps.forEach((step, stepIndex) => {
+                            content += `${stepIndex + 1}. ${step}\n\n`;
+                        });
+                    } else if (typeof testCase.Steps === 'string') {
+                        // Check if steps are already formatted with numbers
+                        if (testCase.Steps.match(/^\d+\.\s/)) {
+                            content += `${testCase.Steps}\n\n`;
+                        } else {
+                            content += `1. ${testCase.Steps}\n\n`;
+                        }
+                    }
                 } else {
-                    content += `1. ${testCase.Steps}\n\n`;
+                    content += `1. [No steps provided]\n\n`;
                 }
 
-                content += `Expected Result: ${testCase['Expected Result']}\n\n`;
+                content += `Expected Result: ${testCase['Expected Result'] || ''}\n\n`;
                 content += `Actual Result: [To be filled during execution]\n\n`;
                 content += `Priority: ${testCase.Priority || 'Not specified'}\n`;
             });
@@ -274,6 +283,12 @@
 
                     if (value === null || value === undefined) {
                         td.innerHTML = '<em>Not provided</em>';
+                    } else if (Array.isArray(value)) {
+                        // Format array of steps as numbered list
+                        const listHtml = value.map((step, idx) =>
+                            `<div>${idx + 1}. ${step}</div>`
+                        ).join('');
+                        td.innerHTML = listHtml;
                     } else if (typeof value === 'object') {
                         try {
                             td.innerHTML = JSON.stringify(value);
@@ -281,7 +296,7 @@
                             td.innerHTML = '<em>Complex value</em>';
                         }
                     } else {
-                        td.textContent = String(value);
+                        td.innerHTML = String(value).replace(/\n/g, '<br>');
                     }
 
                     tr.appendChild(td);

@@ -326,7 +326,12 @@ def download_file(filename):
         file_path = os.path.join(os.path.dirname(__file__), 'tests', 'generated', filename)
         if not os.path.exists(file_path):
             return jsonify({'error': 'File not found'}), 404
-        return send_file(file_path, as_attachment=True)
+        response = send_file(file_path, as_attachment=True)
+        # Add cache control headers to prevent caching
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
     except Exception as e:
         return jsonify({'error': str(e)}), 404
 
@@ -480,14 +485,22 @@ def download_shared_excel(url_key):
                     formatted_data += f"Title: {tc.get('Title', '')}\n"
                 if 'Scenario' in tc:
                     formatted_data += f"Scenario: {tc.get('Scenario', '')}\n"
+                
+                # Handle steps with special care for arrays
                 if 'Steps' in tc:
                     steps = tc.get('Steps', '')
+                    formatted_data += "Steps to reproduce:\n"
                     if isinstance(steps, list):
-                        formatted_data += "Steps:\n" + "\n".join([f"- {step}" for step in steps])
+                        for i, step in enumerate(steps):
+                            formatted_data += f"{i+1}. {step}\n"
                     else:
-                        formatted_data += f"Steps: {steps}\n"
+                        formatted_data += f"1. {steps}\n"
+                
                 if 'Expected Result' in tc:
                     formatted_data += f"Expected Result: {tc.get('Expected Result', '')}\n"
+                if 'Priority' in tc:
+                    formatted_data += f"Priority: {tc.get('Priority', '')}\n"
+                
                 formatted_data += "\n\n"
             
             test_data_str = formatted_data

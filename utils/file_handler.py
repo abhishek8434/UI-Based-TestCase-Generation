@@ -103,9 +103,9 @@ def save_excel_report(test_cases: str, base_name: str) -> Optional[str]:
             if col not in df.columns:
                 df[col] = ''
                 
-        # Convert list of steps to string if needed
-        if 'Steps' in df.columns:
-            df['Steps'] = df['Steps'].apply(lambda x: '\n'.join(x) if isinstance(x, list) else (x or ''))
+        # Convert list of steps to string if needed        
+        if 'Steps' in df.columns:            
+            df['Steps'] = df['Steps'].apply(lambda x: '\n'.join([f"{i+1}. {step}" for i, step in enumerate(x)]) if isinstance(x, list) else (x or ''))
         
         # Fill all remaining NaN values
         df = df.fillna('')
@@ -229,8 +229,8 @@ def parse_traditional_format(test_cases: str, default_section: str = "General") 
             current_test['Scenario'] = scenario_match.group(1).strip()
             continue
             
-        # Handle steps header
-        steps_match = re.match(r'^(?:\*\*)?Steps to reproduce:(?:\*\*)?', line)
+        # Handle steps header - support multiple variations
+        steps_match = re.match(r'^(?:\*\*)?Steps(?: to reproduce)?:(?:\*\*)?', line)
         if steps_match and current_test:
             collecting_steps = True
             current_steps = []
@@ -238,9 +238,11 @@ def parse_traditional_format(test_cases: str, default_section: str = "General") 
             
         # Collect steps
         if collecting_steps:
-            step_match = re.match(r'^(\d+)\.\s*(.*?)$', line)
+            # Support various step formats (1. Step, - Step, * Step, etc.)
+            step_match = re.match(r'^(?:(\d+)\.|\-|\*)\s*(.*?)$', line)
             if step_match:
-                current_steps.append(step_match.group(2).strip())
+                step_text = step_match.group(2) if step_match.groups()[-1] else line
+                current_steps.append(step_text.strip())
                 continue
                 
         # Handle expected result
