@@ -125,31 +125,31 @@ def generate_test_case_from_image(image_path: str, selected_types: List[str] = N
                 
                 try:
                     logger.info(f"Sending request to OpenAI Vision API using model {model} for {test_type} test cases")
-                response = client.chat.completions.create(
+                    response = client.chat.completions.create(
                         model=model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": f"You are a QA engineer generating {config['count']} {test_type} test cases from the provided image. Use {config['prefix']} as the prefix."
-                        },
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": prompt},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/jpeg;base64,{base64_image}"
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": f"You are a QA engineer generating {config['count']} {test_type} test cases from the provided image. Use {config['prefix']} as the prefix."
+                            },
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": prompt},
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:image/jpeg;base64,{base64_image}"
+                                        }
                                     }
-                                }
-                            ]
-                        }
-                    ],
-                    max_tokens=2000
-                )
-                
-                test_cases = response.choices[0].message.content.strip()
-                if test_cases:
+                                ]
+                            }
+                        ],
+                        max_tokens=2000
+                    )
+                    
+                    test_cases = response.choices[0].message.content.strip()
+                    if test_cases:
                         logger.info(f"Successfully generated {test_type} test cases using model {model}")
                         # Add a section header for each test type to help with parsing
                         test_cases_with_header = f"TEST TYPE: {test_type}\n\n{test_cases}"
@@ -157,8 +157,8 @@ def generate_test_case_from_image(image_path: str, selected_types: List[str] = N
                         break
                     else:
                         logger.warning(f"Received empty response for {test_type} test cases using model {model}")
-                    
-            except Exception as e:
+                
+                except Exception as e:
                     last_error = str(e)
                     logger.warning(f"Error using model {model} for {test_type} test cases: {last_error}")
                     continue  # Try next model
