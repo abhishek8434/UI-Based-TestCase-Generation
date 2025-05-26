@@ -2,11 +2,12 @@ import requests
 from typing import Optional, Dict, Any
 from config.settings import JIRA_URL, JIRA_USER, JIRA_API_TOKEN
 
-def fetch_issue(issue_key: str) -> Optional[Dict[str, Any]]:
+def fetch_issue(issue_key: str, jira_config: Optional[Dict[str, str]] = None) -> Optional[Dict[str, Any]]:
     """Fetch issue details from Jira.
 
     Args:
         issue_key (str): The Jira issue key
+        jira_config (Optional[Dict[str, str]]): Optional Jira configuration override
 
     Returns:
         Optional[Dict[str, Any]]: Issue details or None if fetch fails
@@ -15,15 +16,20 @@ def fetch_issue(issue_key: str) -> Optional[Dict[str, Any]]:
         print("❌ Issue key cannot be empty")
         return None
 
-    url = f"{JIRA_URL}/rest/api/3/issue/{issue_key}"
+    # Use config values if provided, otherwise fall back to environment variables
+    jira_url = jira_config.get('url', JIRA_URL) if jira_config else JIRA_URL
+    jira_user = jira_config.get('user', JIRA_USER) if jira_config else JIRA_USER
+    jira_token = jira_config.get('token', JIRA_API_TOKEN) if jira_config else JIRA_API_TOKEN
+
+    url = f"{jira_url}/rest/api/3/issue/{issue_key}"
     headers = {"Accept": "application/json"}
 
     try:
         response = requests.get(
             url,
-            auth=(JIRA_USER, JIRA_API_TOKEN),
+            auth=(jira_user, jira_token),
             headers=headers,
-            timeout=30  # Add timeout
+            timeout=30
         )
         response.raise_for_status()
         return response.json()
