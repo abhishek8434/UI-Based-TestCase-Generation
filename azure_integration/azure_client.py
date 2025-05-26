@@ -5,6 +5,13 @@ from bs4 import BeautifulSoup
 from config.settings import AZURE_DEVOPS_URL, AZURE_DEVOPS_ORG, AZURE_DEVOPS_PROJECT, AZURE_DEVOPS_PAT
 
 class AzureClient:
+    def __init__(self, azure_config=None):
+        # Use config values if provided, otherwise fall back to environment variables
+        self.azure_url = azure_config.get('url', AZURE_DEVOPS_URL) if azure_config else AZURE_DEVOPS_URL
+        self.azure_org = azure_config.get('org', AZURE_DEVOPS_ORG) if azure_config else AZURE_DEVOPS_ORG
+        self.azure_project = azure_config.get('project', AZURE_DEVOPS_PROJECT) if azure_config else AZURE_DEVOPS_PROJECT
+        self.azure_pat = azure_config.get('pat', AZURE_DEVOPS_PAT) if azure_config else AZURE_DEVOPS_PAT
+
     def fetch_azure_work_items(self, work_item_ids=None):
         if not work_item_ids:
             work_item_ids = os.getenv("AZURE_DEVOPS_WORKITEM_IDS", "").split(",")
@@ -16,10 +23,10 @@ class AzureClient:
 
         results = []
         for work_item_id in work_item_ids:
-            url = f"{AZURE_DEVOPS_URL}/{AZURE_DEVOPS_ORG}/{AZURE_DEVOPS_PROJECT}/_apis/wit/workitems/{work_item_id}?api-version=6.0"
+            url = f"{self.azure_url}/{self.azure_org}/{self.azure_project}/_apis/wit/workitems/{work_item_id}?api-version=6.0"
             headers = {
                 "Accept": "application/json",
-                "Authorization": f"Basic {base64.b64encode(f':{AZURE_DEVOPS_PAT}'.encode()).decode()}"
+                "Authorization": f"Basic {base64.b64encode(f':{self.azure_pat}'.encode()).decode()}"
             }
 
             try:

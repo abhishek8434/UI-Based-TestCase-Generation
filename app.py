@@ -249,8 +249,18 @@ def generate():
                             all_types_processed = False
                             
                 elif source_type == 'azure':
-                    # Initialize Azure client
-                    azure_client = AzureClient()
+                    # Initialize Azure client with frontend configuration
+                    azure_config = {
+                        'url': data.get('azureUrl'),
+                        'org': data.get('azureOrg'),
+                        'project': data.get('azureProject'),
+                        'pat': data.get('azurePat')
+                    }
+                    # Only use frontend config if all required values are present
+                    if all(azure_config.values()):
+                        azure_client = AzureClient(azure_config)
+                    else:
+                        azure_client = AzureClient()  # Fall back to environment variables
                     work_items = azure_client.fetch_azure_work_items([item_id])
                     
                     if not work_items or len(work_items) == 0:
