@@ -219,7 +219,9 @@ def generate():
                 test_cases = None
                 
                 if source_type == 'jira':
-                    issue = fetch_issue(item_id)
+                    # Get Jira configuration from request data
+                    jira_config = data.get('jira_config')
+                    issue = fetch_issue(item_id, jira_config)
                     if not issue:
                         continue
                     
@@ -249,15 +251,10 @@ def generate():
                             all_types_processed = False
                             
                 elif source_type == 'azure':
-                    # Initialize Azure client with frontend configuration
-                    azure_config = {
-                        'url': data.get('azureUrl'),
-                        'org': data.get('azureOrg'),
-                        'project': data.get('azureProject'),
-                        'pat': data.get('azurePat')
-                    }
-                    # Only use frontend config if all required values are present
-                    if all(azure_config.values()):
+                    # Get Azure configuration from request data
+                    azure_config = data.get('azure_config')
+                    # Only use frontend config if it exists and all required values are present
+                    if azure_config and all(azure_config.values()):
                         azure_client = AzureClient(azure_config)
                     else:
                         azure_client = AzureClient()  # Fall back to environment variables

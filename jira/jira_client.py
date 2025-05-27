@@ -20,6 +20,18 @@ def fetch_issue(issue_key: str, jira_config: Optional[Dict[str, str]] = None) ->
     jira_url = jira_config.get('url', JIRA_URL) if jira_config else JIRA_URL
     jira_user = jira_config.get('user', JIRA_USER) if jira_config else JIRA_USER
     jira_token = jira_config.get('token', JIRA_API_TOKEN) if jira_config else JIRA_API_TOKEN
+    
+    # Ensure jira_url is not empty and has a proper scheme
+    if not jira_url:
+        print("❌ Jira URL cannot be empty")
+        return None
+    
+    # Ensure URL has a scheme (http:// or https://)
+    if not jira_url.startswith(('http://', 'https://')):
+        jira_url = 'https://' + jira_url
+    
+    # Remove trailing slashes
+    jira_url = jira_url.rstrip('/')
 
     url = f"{jira_url}/rest/api/3/issue/{issue_key}"
     headers = {"Accept": "application/json"}

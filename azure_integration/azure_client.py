@@ -11,6 +11,15 @@ class AzureClient:
         self.azure_org = azure_config.get('org', AZURE_DEVOPS_ORG) if azure_config else AZURE_DEVOPS_ORG
         self.azure_project = azure_config.get('project', AZURE_DEVOPS_PROJECT) if azure_config else AZURE_DEVOPS_PROJECT
         self.azure_pat = azure_config.get('pat', AZURE_DEVOPS_PAT) if azure_config else AZURE_DEVOPS_PAT
+        
+        # Ensure azure_url is properly formatted
+        if self.azure_url:
+            # Add scheme if missing
+            if not self.azure_url.startswith(('http://', 'https://')):
+                self.azure_url = 'https://' + self.azure_url
+            
+            # Remove trailing slashes
+            self.azure_url = self.azure_url.rstrip('/')
 
     def fetch_azure_work_items(self, work_item_ids=None):
         if not work_item_ids:
@@ -19,6 +28,19 @@ class AzureClient:
 
         if not work_item_ids:
             print("⚠️ Work item IDs not found. Please set AZURE_DEVOPS_WORKITEM_IDS in your .env file.")
+            return None
+
+        # Validate required fields
+        if not self.azure_url:
+            print("❌ Azure DevOps URL cannot be empty")
+            return None
+            
+        if not self.azure_org:
+            print("❌ Azure DevOps organization cannot be empty")
+            return None
+            
+        if not self.azure_project:
+            print("❌ Azure DevOps project cannot be empty")
             return None
 
         results = []

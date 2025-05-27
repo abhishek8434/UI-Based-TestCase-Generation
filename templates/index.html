@@ -7,66 +7,66 @@
     <title>Test Case Generator</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
-
+    <link rel="shortcut icon" href="assets/images/favicon.png">
     <style>
         /* Replace existing loader styles with new circular loader styles */
-        .loader-container { 
+        .loader-container {
             display: none;
-            position: fixed; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%; 
-            background: rgba(0, 0, 0, 0.5); 
-            z-index: 1000; 
-            justify-content: center; 
-            align-items: center; 
-        } 
-        
-        .percentage-loader { 
-            position: relative; 
-            width: 120px; 
-            height: 120px; 
-        } 
-        
-        .circular-loader { 
-            width: 100%; 
-            height: 100%; 
-            transform: rotate(-90deg); 
-        } 
-        
-        .loader-bg, 
-        .loader-fg { 
-            fill: none; 
-            stroke-width: 10; 
-            cx: 50; 
-            cy: 50; 
-            r: 45; 
-        } 
-        
-        .loader-bg { 
-            stroke: #ddd; 
-        } 
-        
-        .loader-fg { 
-            stroke: #FF3D00; 
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .percentage-loader {
+            position: relative;
+            width: 120px;
+            height: 120px;
+        }
+
+        .circular-loader {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .loader-bg,
+        .loader-fg {
+            fill: none;
+            stroke-width: 10;
+            cx: 50;
+            cy: 50;
+            r: 45;
+        }
+
+        .loader-bg {
+            stroke: #ddd;
+        }
+
+        .loader-fg {
+            stroke: #FF3D00;
             stroke-linecap: round;
             transform-origin: center;
             stroke-dasharray: 283;
             stroke-dashoffset: 283;
-            transition: stroke-dashoffset 0.3s ease; 
-        } 
-        
-        .loader-text { 
-            position: absolute; 
-            top: 50%; 
-            left: 50%; 
-            transform: translate(-50%, -50%); 
-            font-size: 24px; 
-            color: white; 
-            font-weight: bold; 
-        } 
-        
+            transition: stroke-dashoffset 0.3s ease;
+        }
+
+        .loader-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: white;
+            font-weight: bold;
+        }
+
         .loader {
             width: 175px;
             height: 80px;
@@ -129,9 +129,9 @@
         }
 
         .container {
-            max-width: 800px;
+            max-width: 1280px;
             margin: 0 auto;
-            padding: 2rem;
+            padding: 0 20px;
         }
 
         .card {
@@ -142,14 +142,14 @@
 
         .form-label {
             font-weight: 500;
-            color: #495057;
+            color: #041E2B;
             display: flex;
             align-items: center;
             gap: 0.5rem;
         }
 
         .form-label i {
-            color: #6c757d;
+            color: #61b984;
         }
 
         .form-control,
@@ -160,16 +160,56 @@
         }
 
         .btn-primary {
-            background-color: #0d6efd;
-            border: none;
-            padding: 0.5rem 1rem;
+            background-color: rgb(76, 171, 114);
+            border: 1px solid rgb(76, 171, 114);
+            padding: 8px 22px;
             border-radius: 6px;
+            font-size: 14px;
+            box-shadow: 0 14px 26px -12px rgba(76, 171, 114, 0.42), 0 4px 23px 0 rgba(0, 0, 0, 0.12), 0 8px 10px -5px rgba(76, 171, 114, 0.20);
         }
 
         .btn-secondary {
             background-color: transparent;
-            border: 1px solid #ced4da;
-            color: #495057;
+            border: 1px solid rgba(4, 30, 43, 0.5);
+            color: rgb(4, 30, 43);
+            padding: 8px 22px;
+            font-size: 14px;
+
+        }
+
+        .btn {
+            border-radius: 4px;
+        }
+
+        .btn-primary:hover,
+        .btn-primary:focus {
+            background-color: rgba(76, 171, 114, 0.1);
+            border-color: rgb(76, 171, 114);
+            box-shadow: none;
+            color: rgb(76, 171, 114);
+        }
+
+        .btn-secondary:hover,
+        .btn-secondary:focus {
+            background-color: rgba(4, 30, 43, 0.1);
+            border-color: rgba(4, 30, 43, 0.5);
+            color: rgba(4, 30, 43, 1);
+            box-shadow: 0 14px 26px -12px rgba(4, 30, 43, 0.2), 0 4px 23px 0 rgba(0, 0, 0, 0.12), 0 8px 10px -5px rgba(4, 30, 43, 0.2);
+        }
+
+        .btn:focus {
+            box-shadow: none !important;
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            border-color: rgb(76, 171, 114);
+            box-shadow: none;
+        }
+
+        div:has(input:focus)>.form-label,
+        div:has(select:focus)>.form-label {
+            color: rgb(76, 171, 114) !important;
         }
 
         h1 {
@@ -180,8 +220,8 @@
 
         .subtitle {
             text-align: center;
-            color: #6c757d;
-            margin-bottom: 2rem;
+            color: rgba(4, 30, 43, 0.5);
+            margin-bottom: 0;
         }
 
         .help-text {
@@ -189,9 +229,121 @@
             margin-top: 2rem;
         }
 
-        .help-text a {
-            color: #0d6efd;
+
+
+        .header {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            padding: 24px 0;
+            border-bottom: 1px solid #dee2e6;
+            margin-bottom: 24px;
+        }
+
+        .logo {
+            margin-bottom: 12px;
+        }
+
+        .logo>img {
+            max-height: 40px;
+        }
+
+        .center-content {
+            max-width: calc(100% - 456px);
+            flex: 1;
+        }
+
+        h1.main-title {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+            color: #041E2B;
+        }
+
+        .card-body {
+            padding: 40px;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
+            color: #041E2B;
+        }
+
+        .form-text {
+            color: rgba(4, 30, 43, 0.5);
+            font-size: 13px;
+        }
+
+        ::placeholder {
+            color: rgba(4, 30, 43, 0.5) !important;
+        }
+
+        .form-check-input:checked {
+            background-color: rgb(76, 171, 114);
+            border-color: rgb(76, 171, 114);
+        }
+
+        .form-check-input:focus {
+            box-shadow: none;
+        }
+
+        .form-control,
+        .form-select,
+        .form-check-label {
+            font-size: 14px;
+        }
+
+        .form-check {
+            flex: 0 0 calc(25% - 12px);
+            cursor: pointer;
+        }
+
+        a {
+            color: rgb(76, 171, 114);
             text-decoration: none;
+            transition: all 0.3s ease !important;
+        }
+
+        a:hover {
+            font-weight: 700;
+            color: rgb(76, 171, 114);
+        }
+
+        @media (min-width: 768px) {
+            .gap-md-0 {
+                gap: 0 !important;
+            }
+        }
+
+        @media (max-width: 767px) {
+            .header {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .logo {
+                margin-bottom: 1rem;
+            }
+
+            .center-content {
+                text-align: center;
+                max-width: 100%;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .form-label i {
+                font-size: 1.2rem;
+            }
+
+            .form-control,
+            .form-select {
+                font-size: 0.9rem;
+            }
+
         }
     </style>
 </head>
@@ -199,96 +351,116 @@
 <body>
 
     <!-- Replace the existing loader div with this new structure -->
-    <div class="loader-container"> 
-        <div class="percentage-loader"> 
-            <svg class="circular-loader" viewBox="0 0 100 100"> 
-                <circle class="loader-bg" cx="50" cy="50" r="45"></circle> 
-                <circle class="loader-fg" cx="50" cy="50" r="45"></circle> 
-            </svg> 
-            <div class="loader-text" id="loader-text">0%</div> 
-        </div> 
+    <div class="loader-container">
+        <div class="percentage-loader">
+            <svg class="circular-loader" viewBox="0 0 100 100">
+                <circle class="loader-bg" cx="50" cy="50" r="45"></circle>
+                <circle class="loader-fg" cx="50" cy="50" r="45"></circle>
+            </svg>
+            <div class="loader-text" id="loader-text">0%</div>
+        </div>
     </div>
 
     <div class="container">
-        <h1>Test Case Generator</h1>
-        <p class="subtitle">Generate test cases from your Jira tickets or other sources</p>
+        <div
+            class="header flex-column justify-content-between justify-content-md-start align-items-center gap-4 gap-md-0">
+            <div class="logo">
+                <img src="/static/assets/images/ev--logo.svg" alt="">
+            </div>
+            <div class="center-content">
+                <h1 class="main-title">Test Case Generator</h1>
+                <p class="subtitle">Generate test cases from your Jira tickets or other sources</p>
+            </div>
+            <div class="right-content">
+
+            </div>
+        </div>
+
 
         <div class="card">
             <div class="card-body">
                 <form id="generatorForm">
-                    <div class="mb-4">
-                        <label class="form-label">
-                            <i class="bi bi-gear"></i>
-                            Source Type
-                        </label>
-                        <select class="form-select" id="sourceType" name="sourceType">
-                            <option value="jira">Jira</option>
-                            <option value="azure">Azure DevOps</option>
-                            <option value="image">Image</option>
-                        </select>
+                    <div class="row mb-5">
+                        <div class=" col-md-6">
+                            <label class="form-label">
+                                <i class="bi bi-gear"></i>
+                                Source Type
+                            </label>
+                            <select class="form-select" id="sourceType" name="sourceType">
+                                <option value="jira">Jira</option>
+                                <option value="azure">Azure DevOps</option>
+                                <option value="image">Image</option>
+                            </select>
+                        </div>
                     </div>
 
-                    <div id="jiraFields">
-                        <h5 class="mb-3">Connection Details</h5>
-                        <div class="mb-3">
-                            <label class="form-label">
-                                <i class="bi bi-link"></i>
-                                Jira URL
-                            </label>
-                            <input type="text" class="form-control" name="jiraUrl"
-                                placeholder="https://your-domain.atlassian.net">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">
-                                <i class="bi bi-person"></i>
-                                Jira User
-                            </label>
-                            <input type="text" class="form-control" name="jiraUser" placeholder="email@example.com">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">
-                                <i class="bi bi-key"></i>
-                                Jira API Token
-                            </label>
-                            <input type="password" class="form-control" name="jiraToken">
-                            <div class="form-text">Generate an API token in your Atlassian account settings</div>
+                    <div id="jiraFields" class="mb-5">
+                        <h5 class="mb-4 border-bottom pb-3">Connection Details</h5>
+                        <div class="row ">
+                            <div class="mb-4 col-md-6">
+                                <label class="form-label">
+                                    <i class="bi bi-link"></i>
+                                    Jira URL
+                                </label>
+                                <input type="text" class="form-control" name="jiraUrl"
+                                    placeholder="https://your-domain.atlassian.net" required>
+                            </div>
+                            <div class="mb-4 col-md-6">
+                                <label class="form-label">
+                                    <i class="bi bi-person"></i>
+                                    Jira User
+                                </label>
+                                <input type="text" class="form-control" name="jiraUser" placeholder="email@example.com"
+                                    required>
+                            </div>
+
+                            <div class="col-md-12">
+                                <label class="form-label">
+                                    <i class="bi bi-key"></i>
+                                    Jira API Token
+                                </label>
+                                <input type="password" class="form-control" name="jiraToken" required>
+                                <div class="form-text">Generate an API token in your Atlassian account settings</div>
+                            </div>
                         </div>
                     </div>
 
                     <div id="azureFields" style="display: none;">
-                        <h5 class="mb-3">Connection Details</h5>
-                        <div class="mb-3">
-                            <label class="form-label">
-                                <i class="bi bi-link"></i>
-                                Azure DevOps URL
-                            </label>
-                            <input type="text" class="form-control" name="azureUrl">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">
-                                <i class="bi bi-building"></i>
-                                Azure Organization
-                            </label>
-                            <input type="text" class="form-control" name="azureOrg">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">
-                                <i class="bi bi-folder"></i>
-                                Azure Project
-                            </label>
-                            <input type="text" class="form-control" name="azureProject">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">
-                                <i class="bi bi-key"></i>
-                                Azure PAT
-                            </label>
-                            <input type="password" class="form-control" name="azurePat">
+                        <h5 class="mb-4 border-bottom pb-3">Connection Details</h5>
+                        <div class="row ">
+                            <div class="mb-4 col-md-6">
+                                <label class="form-label">
+                                    <i class="bi bi-link"></i>
+                                    Azure DevOps URL
+                                </label>
+                                <input type="text" class="form-control" name="azureUrl" required>
+                            </div>
+                            <div class="mb-4 col-md-6">
+                                <label class="form-label">
+                                    <i class="bi bi-building"></i>
+                                    Azure Organization
+                                </label>
+                                <input type="text" class="form-control" name="azureOrg" required>
+                            </div>
+                            <div class="mb-4 col-md-6">
+                                <label class="form-label">
+                                    <i class="bi bi-folder"></i>
+                                    Azure Project
+                                </label>
+                                <input type="text" class="form-control" name="azureProject" required>
+                            </div>
+                            <div class="mb-4 col-md-6">
+                                <label class="form-label">
+                                    <i class="bi bi-key"></i>
+                                    Azure PAT
+                                </label>
+                                <input type="password" class="form-control" name="azurePat" required>
+                            </div>
                         </div>
                     </div>
 
                     <div id="imageFields" style="display: none;">
-                        <div class="mb-3">
+                        <div class="mb-4 col-md-12">
                             <label class="form-label">
                                 <i class="bi bi-image"></i>
                                 Upload Image
@@ -298,7 +470,7 @@
                         </div>
                     </div>
 
-                    <div class="mb-4" id="itemIdField">
+                    <div class="mb-4 col-md-12" id="itemIdField">
                         <label class="form-label">
                             <i class="bi bi-card-list"></i>
                             Item ID(s)
@@ -309,23 +481,76 @@
                     </div>
 
                     <!-- Test Case Types selection -->
-                    <div class="mb-4">
+                    <!-- <div class="mb-4">
                         <label class="form-label">
                             <i class="bi bi-list-check"></i>
                             Test Case Types
                         </label>
                         <select class="form-select" id="testCaseTypes" name="testCaseTypes[]" multiple required>
                             <option value="dashboard_functional">Functional - Positive Tests</option>
-                            <option value="dashboard_negative">Functional - Negative Tests</option>
+                            <option value="dashboard_negative">Functional - Positive Test</option>
                             <option value="dashboard_ui">UI Tests</option>
                             <option value="dashboard_ux">UX Tests</option>
                             <option value="dashboard_compatibility">Compatibility Tests</option>
                             <option value="dashboard_performance">Performance Tests</option>
                         </select>
+
+
+                    </div> -->
+                    <div class="mb-4">
+                        <label class="form-label">
+                            <i class="bi bi-list-check"></i>
+                            Test Case Types
+                        </label>
+                        <div class="field d-flex flex-column flex-md-row flex-wrap gap-3 mb-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="dashboard_functional"
+                                    id="check-functional" name="testCaseTypes[]">
+                                <label class="form-check-label" for="check-functional">
+                                    Functional - Positive Tests
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="dashboard_negative"
+                                    id="check-negative" name="testCaseTypes[]">
+                                <label class="form-check-label" for="check-negative">
+                                    Functional - Positive Test
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="dashboard_ui" id="check-ui"
+                                    name="testCaseTypes[]">
+                                <label class="form-check-label" for="check-ui">
+                                    UI Tests
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="dashboard_ux" id="check-ux"
+                                    name="testCaseTypes[]">
+                                <label class="form-check-label" for="check-ux">
+                                    UX Tests
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="dashboard_compatibility"
+                                    id="check-compatibility" name="testCaseTypes[]">
+                                <label class="form-check-label" for="check-compatibility">
+                                    Compatibility Tests
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="dashboard_performance"
+                                    id="check-performance" name="testCaseTypes[]">
+                                <label class="form-check-label" for="check-performance">
+                                    Performance Tests
+                                </label>
+                            </div>
+                        </div>
                     </div>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-2 pt-4">
                         <button type="button" class="btn btn-secondary" onclick="clearForm()">Clear Form</button>
-                        <button type="submit" class="btn btn-primary">Generate Test Cases</button>
+                        <button type="button" class="btn btn-primary" id="generateButton" onclick="submitFormManually()"
+                            style="position: relative; z-index: 10;">Generate Test Cases</button>
                     </div>
                 </form>
             </div>
@@ -340,6 +565,224 @@
     <!-- Keep existing scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Global error handler
+        window.onerror = function (message, source, lineno, colno, error) {
+            console.error('Global error caught:', { message, source, lineno, colno });
+            alert('An error occurred: ' + message);
+            return true; // Prevents the default error handling
+        };
+
+        // Simple test function to verify click events are working
+        function testButtonClick() {
+            alert('Test button clicked successfully!');
+            console.log('Test button clicked');
+            document.body.style.backgroundColor = '#ffeeee'; // Visual feedback
+        }
+
+        // Direct manual form submission
+        function submitFormManually() {
+            console.log('Manual form submission triggered');
+            document.body.style.backgroundColor = '#eeffee'; // Visual feedback
+
+            try {
+                // Get form data directly
+                const form = document.getElementById('generatorForm');
+                const sourceType = document.getElementById('sourceType').value;
+                console.log('Source type:', sourceType);
+
+                // Get test case types
+                const selectedCheckboxes = document.querySelectorAll('input[name="testCaseTypes[]"]:checked');
+                const selectedTypes = Array.from(selectedCheckboxes).map(cb => cb.value);
+                console.log('Selected test types:', selectedTypes);
+
+                if (selectedTypes.length === 0) {
+                    alert('Please select at least one test case type');
+                    return;
+                }
+
+                // Get item ID if needed
+                let itemId = '';
+                if (sourceType !== 'image') {
+                    itemId = document.querySelector('input[name="itemId"]').value;
+                    if (!itemId || itemId.trim() === '') {
+                        alert('Please enter at least one Item ID');
+                        return;
+                    }
+                }
+
+                // Build data object manually based on source type
+                let data = {
+                    sourceType: sourceType,
+                    testCaseTypes: selectedTypes
+                };
+
+                if (sourceType !== 'image') {
+                    data.itemId = itemId.split(',').map(id => id.trim());
+                }
+
+                // Add source-specific config
+                if (sourceType === 'jira') {
+                    let jiraUrl = document.querySelector('input[name="jiraUrl"]').value;
+                    const jiraUser = document.querySelector('input[name="jiraUser"]').value;
+                    const jiraToken = document.querySelector('input[name="jiraToken"]').value;
+
+                    // Validate Jira fields
+                    if (!jiraUrl || jiraUrl.trim() === '') {
+                        alert('Please enter a Jira URL');
+                        return;
+                    }
+                    if (!jiraUser || jiraUser.trim() === '') {
+                        alert('Please enter a Jira user email');
+                        return;
+                    }
+                    if (!jiraToken || jiraToken.trim() === '') {
+                        alert('Please enter a Jira API token');
+                        return;
+                    }
+
+                    // Add https:// if missing
+                    if (jiraUrl && !jiraUrl.match(/^https?:\/\//)) {
+                        jiraUrl = 'https://' + jiraUrl;
+                    }
+
+                    // Trim trailing slashes
+                    jiraUrl = jiraUrl.replace(/\/+$/, '');
+
+                    // Validate Jira URL format
+                    if (!jiraUrl.includes('.atlassian.net')) {
+                        alert('Please enter a valid Jira URL (e.g., https://your-domain.atlassian.net)');
+                        return;
+                    }
+
+                    data.jira_config = {
+                        url: jiraUrl,
+                        user: jiraUser,
+                        token: jiraToken
+                    };
+
+                } else if (sourceType === 'azure') {
+                    let azureUrl = document.querySelector('input[name="azureUrl"]').value;
+                    const azureOrg = document.querySelector('input[name="azureOrg"]').value;
+                    const azureProject = document.querySelector('input[name="azureProject"]').value;
+                    const azurePat = document.querySelector('input[name="azurePat"]').value;
+
+                    // Validate Azure fields
+                    if (!azureUrl || azureUrl.trim() === '') {
+                        alert('Please enter an Azure DevOps URL');
+                        return;
+                    }
+                    if (!azureOrg || azureOrg.trim() === '') {
+                        alert('Please enter an Azure DevOps organization');
+                        return;
+                    }
+                    if (!azureProject || azureProject.trim() === '') {
+                        alert('Please enter an Azure DevOps project');
+                        return;
+                    }
+                    if (!azurePat || azurePat.trim() === '') {
+                        alert('Please enter an Azure DevOps Personal Access Token');
+                        return;
+                    }
+
+                    // Add https:// if missing
+                    if (azureUrl && !azureUrl.match(/^https?:\/\//)) {
+                        azureUrl = 'https://' + azureUrl;
+                    }
+
+                    // Trim trailing slashes
+                    azureUrl = azureUrl.replace(/\/+$/, '');
+
+                    // Validate Azure URL format
+                    if (!azureUrl.includes('dev.azure.com')) {
+                        alert('Please enter a valid Azure DevOps URL (e.g., https://dev.azure.com)');
+                        return;
+                    }
+
+                    data.azure_config = {
+                        url: azureUrl,
+                        org: azureOrg,
+                        project: azureProject,
+                        pat: azurePat
+                    };
+                }
+
+                // Show loader
+                const loader = document.querySelector('.loader-container');
+                loader.style.display = 'flex';
+
+                console.log('Sending request with data:', data);
+
+                // Make API request directly
+                if (sourceType === 'image') {
+                    // For image, use FormData and traditional form submission
+                    const formData = new FormData(form);
+
+                    // Check if image is selected
+                    const imageFile = formData.get('imageFile');
+                    if (!imageFile || !imageFile.name) {
+                        alert('Please select an image file');
+                        loader.style.display = 'none';
+                        return;
+                    }
+
+                    // Clear existing test case types and add selected ones
+                    formData.delete('testCaseTypes[]');
+                    selectedTypes.forEach(type => formData.append('testCaseTypes[]', type));
+
+                    fetch('/api/generate', {
+                        method: 'POST',
+                        body: formData
+                    })
+                        .then(response => response.json())
+                        .then(result => {
+                            if (result.error) {
+                                alert('Error: ' + result.error);
+                                loader.style.display = 'none';
+                                return;
+                            }
+
+                            // Poll for completion
+                            checkGenerationStatus(loader, result);
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Error: ' + error.message);
+                            loader.style.display = 'none';
+                        });
+
+                } else {
+                    // For Jira and Azure, use JSON
+                    fetch('/api/generate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    })
+                        .then(response => response.json())
+                        .then(result => {
+                            if (result.error) {
+                                alert('Error: ' + result.error);
+                                loader.style.display = 'none';
+                                return;
+                            }
+
+                            // Poll for completion
+                            checkGenerationStatus(loader, result);
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Error: ' + error.message);
+                            loader.style.display = 'none';
+                        });
+                }
+
+            } catch (error) {
+                console.error('Error in manual form submission:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+
         // Keep existing JavaScript code unchanged
         document.getElementById('sourceType').addEventListener('change', function () {
             const jiraFields = document.getElementById('jiraFields');
@@ -378,24 +821,24 @@
         }
 
         // Function to check test case generation status
-        function updateLoader(percentage) { 
-            const circle = document.querySelector('.loader-fg'); 
-            const text = document.getElementById('loader-text'); 
-            const radius = 45; 
+        function updateLoader(percentage) {
+            const circle = document.querySelector('.loader-fg');
+            const text = document.getElementById('loader-text');
+            const radius = 45;
             const circumference = 2 * Math.PI * radius;
-            
+
             // Ensure percentage is between 0 and 100
             percentage = Math.min(100, Math.max(0, percentage));
-            
+
             // For 100%, make sure offset is exactly 0
             const offset = percentage === 100 ? 0 : circumference - (percentage / 100) * circumference;
-            
+
             // Set both strokeDasharray and strokeDashoffset
             circle.style.strokeDasharray = `${circumference}`;
             circle.style.strokeDashoffset = offset;
-            
+
             // Update the text
-            text.textContent = `${Math.round(percentage)}%`; 
+            text.textContent = `${Math.round(percentage)}%`;
         }
 
         async function checkGenerationStatus(loader, result) {
@@ -412,10 +855,10 @@
                         window.location.href = `/results?files=${encodeURIComponent(JSON.stringify(result.files))}`;
                         return;
                     }
-        
+
                     const response = await fetch('/api/generation-status');
                     const status = await response.json();
-        
+
                     if (!status.is_generating) {
                         // Smoothly animate to 100%
                         const finalAnimation = setInterval(() => {
@@ -429,12 +872,12 @@
                         }, 50);
                         return;
                     }
-        
+
                     // Calculate progress percentage
                     if (status.total_types > 0) {
                         // Base progress calculation
                         const targetProgress = (status.completed_types / status.total_types) * 90; // Max 90% until complete
-                        
+
                         // Smooth progress animation
                         if (targetProgress > currentProgress) {
                             const progressDiff = targetProgress - currentProgress;
@@ -443,7 +886,7 @@
                             updateLoader(currentProgress);
                         }
                     }
-        
+
                     retryCount++;
                     setTimeout(checkStatus, 2000); // Poll every 2 seconds
                 } catch (error) {
@@ -452,112 +895,34 @@
                     setTimeout(checkStatus, 5000); // Retry after 5 seconds on error
                 }
             };
-        
+
             // Start with 0%
             updateLoader(0);
             // Start checking status
             checkStatus();
         }
 
-        document.getElementById('generatorForm').addEventListener('submit', async function (e) {
-            e.preventDefault();
+        // Add console logging to help debug the issue
+        console.log('Setting up form submission handler');
 
-            const formData = new FormData(this);
-            const sourceType = formData.get('sourceType');
+        // Add window load event to ensure everything is ready
+        window.onload = function () {
+            console.log('Window loaded completely');
 
-            // Fix: Properly handle multiple test case types
-            const testCaseTypesSelect = document.getElementById('testCaseTypes');
-            const selectedTypes = Array.from(testCaseTypesSelect.selectedOptions).map(option => option.value);
+            // Check if buttons are clickable
+            const testBtn = document.querySelector('.btn-warning');
+            const generateBtn = document.getElementById('generateButton');
 
-            if (selectedTypes.length === 0) {
-                alert('Please select at least one test case type');
-                return;
+            if (testBtn) {
+                console.log('Test button found');
+                testBtn.style.border = '2px solid red';
             }
 
-            // Remove existing test case types from formData
-            formData.delete('testCaseTypes[]');
-            // Add all selected types
-            selectedTypes.forEach(type => formData.append('testCaseTypes[]', type));
-
-            if (sourceType !== 'image') {
-                const itemId = formData.get('itemId');
-                if (!itemId || itemId.trim() === '') {
-                    alert('Please enter at least one Item ID');
-                    return;
-                }
+            if (generateBtn) {
+                console.log('Generate button found');
+                generateBtn.style.border = '2px solid green';
             }
-
-            const loader = document.querySelector('.loader-container');
-            loader.style.display = 'flex';
-
-            try {
-                if (sourceType === 'image') {
-                    const imageFile = formData.get('imageFile');
-                    if (!imageFile) {
-                        alert('Please select an image file');
-                        loader.style.display = 'none';
-                        return;
-                    }
-
-                    const response = await fetch('/api/generate', {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    const result = await response.json();
-
-                    if (result.error) {
-                        alert('Error: ' + result.error);
-                        loader.style.display = 'none';
-                        return;
-                    }
-
-                    // Instead of redirecting immediately, poll for completion
-                    checkGenerationStatus(loader, result);
-                } else {
-                    const data = {
-                        sourceType: sourceType,
-                        itemId: formData.get('itemId').split(',').map(id => id.trim()),
-                        testCaseTypes: selectedTypes  // Use the array of selected types
-                    };
-
-                    // Add source-specific fields
-                    if (sourceType === 'jira') {
-                        data.jiraUrl = formData.get('jiraUrl');
-                        data.jiraUser = formData.get('jiraUser');
-                        data.jiraToken = formData.get('jiraToken');
-                    } else if (sourceType === 'azure') {
-                        data.azureUrl = formData.get('azureUrl');
-                        data.azureOrg = formData.get('azureOrg');
-                        data.azureProject = formData.get('azureProject');
-                        data.azurePat = formData.get('azurePat');
-                    }
-
-                    const response = await fetch('/api/generate', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(data)
-                    });
-
-                    const result = await response.json();
-
-                    if (result.error) {
-                        alert('Error: ' + result.error);
-                        loader.style.display = 'none';
-                        return;
-                    }
-
-                    // Instead of redirecting immediately, poll for completion
-                    checkGenerationStatus(loader, result);
-                }
-
-            } catch (error) {
-                alert('Error: ' + error.message);
-                loader.style.display = 'none';
-            }
-        });
+        };
     </script>
 
 </body>
