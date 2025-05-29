@@ -741,6 +741,9 @@
                                 return;
                             }
 
+                            // Store the URL key for use in redirection (add this line)
+                            window.generatedUrlKey = result.url_key;
+
                             // Poll for completion
                             checkGenerationStatus(loader, result);
                         })
@@ -759,6 +762,7 @@
                         },
                         body: JSON.stringify(data)
                     })
+                        // In the fetch response handler
                         .then(response => response.json())
                         .then(result => {
                             if (result.error) {
@@ -766,6 +770,9 @@
                                 loader.style.display = 'none';
                                 return;
                             }
+                            
+                            // Store the URL key for use in redirection (add this line)
+                            window.generatedUrlKey = result.url_key;
 
                             // Poll for completion
                             checkGenerationStatus(loader, result);
@@ -859,17 +866,27 @@
                     const response = await fetch('/api/generation-status');
                     const status = await response.json();
 
+                    // In the checkGenerationStatus function
                     if (!status.is_generating) {
                         // Smoothly animate to 100%
                         const finalAnimation = setInterval(() => {
                             if (currentProgress >= 100) {
                                 clearInterval(finalAnimation);
-                                window.location.href = `/results?files=${encodeURIComponent(JSON.stringify(result.files))}`;
+                                // Use the stored URL key for redirection
+                                window.location.href = `/results?files=${encodeURIComponent(JSON.stringify(result.files))}&key=${window.generatedUrlKey}`;
                                 return;
                             }
                             currentProgress += 2;
                             updateLoader(currentProgress);
                         }, 50);
+                        return;
+                    }
+                    
+                    // Also update the timeout redirect
+                    if (retryCount >= maxRetries) {
+                        updateLoader(100);
+                        alert('Generation is taking too long. You will be redirected to the results page.');
+                        window.location.href = `/results?files=${encodeURIComponent(JSON.stringify(result.files))}&key=${window.generatedUrlKey}`;
                         return;
                     }
 

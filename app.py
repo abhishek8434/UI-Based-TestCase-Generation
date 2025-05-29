@@ -1,12 +1,15 @@
-from flask import Flask, request, jsonify, send_file, render_template
+from flask import Flask, request, jsonify, send_file, render_template, after_this_request
 from flask_cors import CORS
 from jira.jira_client import fetch_issue
 from azure_integration.azure_client import AzureClient
 from ai.generator import generate_test_case
 from utils.file_handler import save_test_script, save_excel_report
 import os
+import json
 import logging
+# Add at the top of the file
 from utils.mongo_handler import MongoHandler
+import datetime
 
 app = Flask(__name__)
 CORS(app)
@@ -164,21 +167,42 @@ def generate():
                 txt_file = save_test_script(test_cases, file_base_name)
                 excel_file = save_excel_report(test_cases, file_base_name)
                 
-                # Mark all test types as completed
-                with generation_status['lock']:
-                    generation_status['completed_types'] = generation_status['total_types'].copy()
-                    generation_status['is_generating'] = False
-                
                 if txt_file and excel_file:
+                    results = {
+                        'txt': txt_file,
+                        'excel': excel_file
+                    }
+                    
+                    # Inside the image upload handler, before saving to MongoDB
+                    formatted_test_cases = []
+                    for idx, test_case in enumerate(test_cases.split('\n\n')):
+                        if test_case.strip():
+                            # Start test case IDs from 2 instead of 1
+                            test_case_id = f"TC_KAN-1_{idx + 2}"
+                            formatted_test_cases.append({
+                                'test_case_id': test_case_id,
+                                'content': test_case,
+                                'status': ''
+                            })
+                        
+                    # Create MongoDB handler and save test case data
+                    mongo_handler = MongoHandler()
+                    url_key = mongo_handler.save_test_case({
+                        'files': results,
+                        'test_cases': formatted_test_cases,
+                        'source_type': 'image',
+                        'image_id': unique_id
+                    }, unique_id)
+                    
+                    # Mark all test types as completed
+                    with generation_status['lock']:
+                        generation_status['completed_types'] = generation_status['total_types'].copy()
+                        generation_status['is_generating'] = False
+                    
                     return jsonify({
                         'success': True,
-                        'files': {
-                            'image': {
-                                'txt': txt_file,
-                                'excel': excel_file,
-                                'source_image': stored_filename
-                            }
-                        }
+                        'url_key': url_key,
+                        'files': results
                     })
                 else:
                     os.remove(image_path)  # Clean up if saving fails
@@ -315,8 +339,30 @@ def generate():
             if not results:
                 return jsonify({'error': 'Failed to generate test cases for any items'}), 400
                 
+            # Before returning the final response in Jira/Azure handler
+            formatted_test_cases = []
+            for idx, test_case in enumerate(test_cases.split('\n\n')):
+                if test_case.strip():
+                    # Start test case IDs from 2 instead of 1
+                    test_case_id = f"TC_{item_ids[0]}_{idx + 2}"
+                    formatted_test_cases.append({
+                        'test_case_id': test_case_id,
+                        'content': test_case,
+                        'status': ''
+                    })
+            
+            # Create MongoDB handler and save test case data
+            mongo_handler = MongoHandler()
+            url_key = mongo_handler.save_test_case({
+                'files': results,
+                'test_cases': formatted_test_cases,
+                'source_type': source_type,
+                'item_ids': item_ids
+            }, item_ids[0] if item_ids else None)
+            
             return jsonify({
                 'success': True,
+                'url_key': url_key,
                 'files': results
             })
             
@@ -333,13 +379,129 @@ def download_file(filename):
         file_path = os.path.join(os.path.dirname(__file__), 'tests', 'generated', filename)
         if not os.path.exists(file_path):
             return jsonify({'error': 'File not found'}), 404
-        response = send_file(file_path, as_attachment=True)
+        
+        # Check if status values were provided
+        status_values = request.args.get('status')
+        
+        # Log status values for debugging
+        if status_values:
+            try:
+                status_dict = json.loads(status_values)
+                logger.info(f"DOWNLOAD FILE: Received {len(status_dict)} status values: {status_dict}")
+            except Exception as e:
+                logger.error(f"DOWNLOAD FILE: Error parsing status values: {e}")
+        else:
+            logger.info("DOWNLOAD FILE: No status values provided")
+        
+        # Check if a custom filename was provided
+        custom_filename = request.args.get('filename')
+        
+        # If it's an Excel file and status values are provided, update the file
+        if status_values and filename.endswith('.xlsx'):
+            try:
+                status_dict = json.loads(status_values)
+                logger.info(f"Updating Excel file with status values: {status_dict}")
+                
+                # Update the Excel file with status values
+                import pandas as pd
+                df = pd.read_excel(file_path)
+                
+                # Update each row where Title matches status key
+                updated_count = 0
+                for index, row in df.iterrows():
+                    title = row.get('Title', '')
+                    if title and title in status_dict:
+                        df.at[index, 'Status'] = status_dict[title]
+                        updated_count += 1
+                
+                logger.info(f"Updated {updated_count} rows with status values")
+                
+                # Save to a temporary file
+                temp_file_path = f"{file_path}.temp.xlsx"
+                df.to_excel(temp_file_path, index=False)
+                
+                # Use the temporary file for download with custom filename if provided
+                if custom_filename:
+                    response = send_file(temp_file_path, as_attachment=True, download_name=custom_filename)
+                else:
+                    response = send_file(temp_file_path, as_attachment=True)
+                
+                # Set up cleanup after request is complete
+                @after_this_request
+                def remove_temp_file(response):
+                    try:
+                        if os.path.exists(temp_file_path):
+                            os.remove(temp_file_path)
+                    except Exception as e:
+                        logger.error(f"Error removing temp file: {e}")
+                    return response
+                    
+            except Exception as e:
+                logger.error(f"Error updating Excel with status values: {e}")
+                # Fall back to original file if error occurs
+                if custom_filename:
+                    response = send_file(file_path, as_attachment=True, download_name=custom_filename)
+                else:
+                    response = send_file(file_path, as_attachment=True)
+        
+        # For TXT files with status values
+        elif status_values and filename.endswith('.txt'):
+            try:
+                status_dict = json.loads(status_values)
+                logger.info(f"Updating TXT file with status values: {status_dict}")
+                
+                # Read the original content
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Create a temporary file
+                temp_file_path = f"{file_path}.temp.txt"
+                
+                # Write updated content with status values appended
+                with open(temp_file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                    f.write("\n\n# STATUS VALUES\n")
+                    for title, status in status_dict.items():
+                        if status:  # Only include non-empty status values
+                            f.write(f"{title}: {status}\n")
+                
+                # Use the temporary file for download with custom filename if provided
+                if custom_filename:
+                    response = send_file(temp_file_path, as_attachment=True, download_name=custom_filename)
+                else:
+                    response = send_file(temp_file_path, as_attachment=True)
+                
+                # Set up cleanup after request is complete
+                @after_this_request
+                def remove_temp_file(response):
+                    try:
+                        if os.path.exists(temp_file_path):
+                            os.remove(temp_file_path)
+                    except Exception as e:
+                        logger.error(f"Error removing temp file: {e}")
+                    return response
+                    
+            except Exception as e:
+                logger.error(f"Error updating TXT with status values: {e}")
+                # Fall back to original file if error occurs
+                if custom_filename:
+                    response = send_file(file_path, as_attachment=True, download_name=custom_filename)
+                else:
+                    response = send_file(file_path, as_attachment=True)
+        else:
+            # Default case - no status values or not a handled file type
+            if custom_filename:
+                response = send_file(file_path, as_attachment=True, download_name=custom_filename)
+            else:
+                response = send_file(file_path, as_attachment=True)
+            
         # Add cache control headers to prevent caching
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
         return response
     except Exception as e:
+        logger.error(f"Error downloading file: {e}")
         return jsonify({'error': str(e)}), 404
 
 @app.route('/api/content/<path:filename>')
@@ -357,6 +519,16 @@ def get_file_content(filename):
             # Read the Excel file
             df = pd.read_excel(file_path)
             
+            # Get status values if provided
+            status_values = request.args.get('status')
+            status_dict = {}
+            if status_values:
+                try:
+                    status_dict = json.loads(status_values)
+                    logger.info(f"Applying status values to content: {status_dict}")
+                except Exception as e:
+                    logger.error(f"Error parsing status values: {e}")
+            
             # Convert to records and handle NaN values
             records = []
             for index, row in df.iterrows():
@@ -368,6 +540,12 @@ def get_file_content(filename):
                         record[column] = None
                     else:
                         record[column] = value
+                
+                # Update status if available
+                title = record.get('Title', '')
+                if title and title in status_dict:
+                    record['Status'] = status_dict[title]
+                
                 records.append(record)
             
             logger.info(f"Converted Excel file {filename} to {len(records)} records")
@@ -382,58 +560,76 @@ def get_file_content(filename):
         logger.error(f"Error reading file {filename}: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 404
 
-# Update the generation status endpoint
-@app.route('/api/generation-status')
-def check_generation_status():
+@app.route('/api/update-status', methods=['POST'])
+def update_status():
     try:
-        # Get item IDs from query string if provided
-        item_ids = request.args.get('items', '').split(',')
-        item_ids = [item_id for item_id in item_ids if item_id]  # Filter empty items
+        data = request.json
+        logger.info(f"Received status update request: {data}")
         
-        with generation_status['lock']:
-            is_generating = generation_status['is_generating']
-            total = len(generation_status['total_types']) 
-            completed = len(generation_status['completed_types'])
-            completed_types_list = list(generation_status['completed_types'])
+        url_key = data.get('key')
+        test_case_id = data.get('test_case_id')
+        status = data.get('status')
+        is_shared_view = data.get('shared_view', False)
+
+        # Validate required parameters
+        if not url_key:
+            return jsonify({'error': 'Missing required parameter: key'}), 400
+        if not test_case_id:
+            return jsonify({'error': 'Missing required parameter: test_case_id'}), 400
+        if not status:
+            return jsonify({'error': 'Missing required parameter: status'}), 400
             
-            # Ensure progress percentage is calculated properly
-            progress_percentage = (completed / total * 100) if total > 0 else 0
+        # Validate status is not empty string
+        if status.strip() == '':
+            return jsonify({'error': 'Status cannot be empty'}), 400
+
+        mongo_handler = MongoHandler()
         
-        # Check if files exist for the requested items
-        files_ready = False
-        if item_ids and not is_generating:
-            files_ready = True
-            for item_id in item_ids:
-                safe_filename = ''.join(c for c in item_id if c.isalnum() or c in ('-', '_'))
-                file_base_name = f'test_{safe_filename}'
-                
-                txt_path = os.path.join(os.path.dirname(__file__), 'tests', 'generated', f'{file_base_name}.txt')
-                excel_path = os.path.join(os.path.dirname(__file__), 'tests', 'generated', f'{file_base_name}.xlsx')
-                
-                if not (os.path.exists(txt_path) and os.path.exists(excel_path)):
-                    files_ready = False
-                    logger.warning(f"Files not ready for {item_id}: txt={os.path.exists(txt_path)}, excel={os.path.exists(excel_path)}")
-                    break
-                    
-            logger.info(f"Generation status check - is_generating: {is_generating}, completed: {completed}/{total}, files_ready: {files_ready}")
+        # First verify the document exists
+        doc = mongo_handler.collection.find_one({"url_key": url_key})
+        if not doc:
+            error_msg = f"No document found with url_key: {url_key}"
+            logger.error(error_msg)
+            return jsonify({'error': error_msg}), 404
+        
+        # Try to update using the MongoHandler
+        success = mongo_handler.update_test_case_status(url_key, test_case_id, status)
+        
+        if success:
+            # Force an update to the status dict and test data array in a single operation
+            # This ensures both copies of the data are updated
+            result = mongo_handler.collection.update_one(
+                {"url_key": url_key},
+                {
+                    "$set": {
+                        f"status.{test_case_id}": status,
+                        "status_updated_at": datetime.datetime.now()
+                    }
+                }
+            )
+            
+            # For shared view, we also need to update the test_data array entries directly
+            if is_shared_view and 'test_data' in doc and isinstance(doc['test_data'], list):
+                for i, tc in enumerate(doc['test_data']):
+                    if tc.get('Title') == test_case_id:
+                        # Update the Status field directly in the array
+                        mongo_handler.collection.update_one(
+                            {"url_key": url_key},
+                            {"$set": {f"test_data.{i}.Status": status}}
+                        )
+                        logger.info(f"Updated status in test_data array index {i}")
+                        break
+            
+            logger.info(f"Successfully updated status for test case '{test_case_id}'")
+            return jsonify({'success': True})
         else:
-            logger.info(f"Generation status check - is_generating: {is_generating}, completed: {completed}/{total}, no items checked")
-    
-        return jsonify({
-            'is_generating': is_generating,
-            'completed_types': completed,
-            'total_types': total,
-            'completed_test_types': completed_types_list,
-            'progress_percentage': progress_percentage,
-            'files_ready': files_ready
-        })
+            error_msg = f"Failed to update status for test case {test_case_id} in document {url_key}"
+            logger.error(error_msg)
+            return jsonify({'error': error_msg}), 404
+
     except Exception as e:
-        logger.error(f"Error in generation status check: {str(e)}", exc_info=True)
-        return jsonify({
-            'is_generating': False,
-            'error': str(e),
-            'files_ready': False
-        }), 500
+        logger.error(f"Error updating status: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 # Initialize MongoDB handler
 mongo_handler = MongoHandler()
@@ -462,6 +658,10 @@ def view_shared_test_case(url_key):
     test_case = mongo_handler.get_test_case(url_key)
     if not test_case:
         return render_template('404.html'), 404
+    
+    # Make sure the key is included in the test_case object
+    test_case['key'] = url_key
+    
     return render_template('view.html', test_case=test_case)
 
 @app.route('/api/shared/excel/<url_key>')
@@ -472,7 +672,29 @@ def download_shared_excel(url_key):
         if not test_case:
             return jsonify({'error': 'Test case not found'}), 404
         
-        # Generate filename based on item_id or use generic name
+        # Check if a custom filename was provided in the request
+        custom_filename = request.args.get('filename')
+        
+        # Get status values if provided in the request
+        status_values = request.args.get('status')
+        status_dict = {}
+        if status_values:
+            try:
+                status_dict = json.loads(status_values)
+                logger.info(f"SHARED EXCEL: Received {len(status_dict)} status values: {status_dict}")
+            except Exception as e:
+                logger.error(f"SHARED EXCEL: Error parsing status values: {e}")
+        else:
+            logger.info("SHARED EXCEL: No status values provided")
+        
+        # Generate default filename based on item_id or use generic name if no custom filename
+        if not custom_filename:
+            if test_case.get('item_id'):
+                custom_filename = f"test_{test_case['item_id']}.xlsx"
+            else:
+                custom_filename = f"test_shared_{url_key[:8]}.xlsx"
+        
+        # Use item_id for the base name of the generated file
         if test_case.get('item_id'):
             file_base_name = f"test_{test_case['item_id']}"
         else:
@@ -481,40 +703,63 @@ def download_shared_excel(url_key):
         # Format test data properly for Excel generation
         test_data = test_case['test_data']
         
-        # If test_data is already in array format, format it for Excel
-        if isinstance(test_data, list):
-            import json
-            formatted_data = ""
+        # Now format for Excel generation
+        import json
+        formatted_data = ""
+        
+        # Track which test cases have status updates
+        status_updated = set()
+        updated_count = 0
+        
+        for tc in test_data:
+            formatted_data += "TEST CASE:\n"
+            if 'Title' in tc:
+                title = tc.get('Title', '')
+                formatted_data += f"Title: {title}\n"
+            if 'Scenario' in tc:
+                formatted_data += f"Scenario: {tc.get('Scenario', '')}\n"
             
-            for tc in test_data:
-                formatted_data += "TEST CASE:\n"
-                if 'Title' in tc:
-                    formatted_data += f"Title: {tc.get('Title', '')}\n"
-                if 'Scenario' in tc:
-                    formatted_data += f"Scenario: {tc.get('Scenario', '')}\n"
-                
-                # Handle steps with special care for arrays
-                if 'Steps' in tc:
-                    steps = tc.get('Steps', '')
-                    formatted_data += "Steps to reproduce:\n"
-                    if isinstance(steps, list):
-                        for i, step in enumerate(steps):
-                            formatted_data += f"{i+1}. {step}\n"
-                    else:
-                        formatted_data += f"1. {steps}\n"
-                
-                if 'Expected Result' in tc:
-                    formatted_data += f"Expected Result: {tc.get('Expected Result', '')}\n"
-                if 'Priority' in tc:
-                    formatted_data += f"Priority: {tc.get('Priority', '')}\n"
-                
-                formatted_data += "\n\n"
+            # Handle steps with special care for arrays
+            if 'Steps' in tc:
+                steps = tc.get('Steps', '')
+                formatted_data += "Steps to reproduce:\n"
+                if isinstance(steps, list):
+                    for i, step in enumerate(steps):
+                        formatted_data += f"{i+1}. {step}\n"
+                else:
+                    formatted_data += f"1. {steps}\n"
             
-            test_data_str = formatted_data
-        else:
-            # Convert test data to string if it's in other JSON format
-            import json
-            test_data_str = json.dumps(test_data, indent=2)
+            if 'Expected Result' in tc:
+                formatted_data += f"Expected Result: {tc.get('Expected Result', '')}\n"
+            
+            # Explicitly include Status with extra prominence
+            # Get from status_dict if available (DOM values), otherwise from test case
+            title = tc.get('Title', '')
+            status = ''
+            if title and title in status_dict:
+                status = status_dict[title]
+                status_updated.add(title)
+                updated_count += 1
+            else:
+                status = tc.get('Status', '')
+            
+            # Make sure status is clearly visible
+            formatted_data += f"Status: {status}\n\n"
+            
+            if 'Priority' in tc:
+                formatted_data += f"Priority: {tc.get('Priority', '')}\n"
+            
+            formatted_data += "\n\n"
+        
+        logger.info(f"SHARED EXCEL: Updated {updated_count} test cases with status values")
+        
+        # Add a summary of all status values at the end for debugging
+        formatted_data += "\n\n# STATUS SUMMARY\n"
+        for title, status in status_dict.items():
+            if status:
+                formatted_data += f"{title}: {status}\n"
+        
+        test_data_str = formatted_data
         
         # Generate Excel file
         from utils.file_handler import save_excel_report
@@ -523,11 +768,208 @@ def download_shared_excel(url_key):
         if not excel_file:
             return jsonify({'error': 'Failed to generate Excel file'}), 500
         
-        # Return the Excel file
+        # Return the Excel file with the custom filename
         file_path = os.path.join(os.path.dirname(__file__), 'tests', 'generated', excel_file)
-        return send_file(file_path, as_attachment=True)
+        response = send_file(file_path, as_attachment=True, download_name=custom_filename)
+        
+        # Add aggressive cache control headers to prevent caching
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0, private"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        response.headers["X-Status-Updated-Count"] = str(updated_count)
+        response.headers["X-Status-Update-Time"] = str(datetime.datetime.now())
+        
+        return response
     except Exception as e:
         logger.error(f"Error generating Excel file: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# Add this after the generate endpoint
+@app.route('/api/generation-status')
+def get_generation_status():
+    try:
+        with generation_status['lock']:
+            response = {
+                'is_generating': generation_status['is_generating'],
+                'completed_types': list(generation_status['completed_types']),
+                'total_types': list(generation_status['total_types'])
+            }
+        return jsonify(response)
+    except Exception as e:
+        logger.error(f"Error getting generation status: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/shared-status', methods=['GET'])
+def get_shared_status():
+    try:
+        url_key = request.args.get('key')
+        if not url_key:
+            return jsonify({'error': 'Missing URL key parameter'}), 400
+            
+        logger.info(f"Fetching shared status for URL key: {url_key}")
+        mongo_handler = MongoHandler()
+        
+        # Get all status values for the test cases in this document
+        # Force refresh from database rather than using cached data
+        status_values = mongo_handler.get_test_case_status_values(url_key, force_refresh=True)
+        
+        if status_values is None:
+            return jsonify({'error': 'Test case not found'}), 404
+            
+        response = jsonify({
+            'success': True,
+            'status_values': status_values,
+            'timestamp': str(datetime.datetime.now())  # Add timestamp for debugging
+        })
+        
+        # Add cache control headers to prevent caching
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        
+        return response
+    except Exception as e:
+        logger.error(f"Error retrieving shared status: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/notify-status-change', methods=['GET'])
+def notify_status_change():
+    try:
+        url_key = request.args.get('key')
+        test_case_id = request.args.get('testCaseId')
+        status = request.args.get('status')
+        
+        if not url_key:
+            return jsonify({'error': 'Missing URL key parameter'}), 400
+            
+        # Log the notification
+        logger.info(f"Received status change notification for key={url_key}, testCaseId={test_case_id}, status={status}")
+        
+        # Update a special flag in MongoDB to indicate status has changed
+        # This can be used to trigger immediate sync in other views
+        mongo_handler.collection.update_one(
+            {"url_key": url_key},
+            {
+                "$set": {
+                    "status_updated_at": datetime.datetime.now(),
+                    "last_status_change": {
+                        "test_case_id": test_case_id,
+                        "status": status,
+                        "timestamp": datetime.datetime.now()
+                    }
+                }
+            }
+        )
+        
+        # Return success with cache control headers
+        response = jsonify({
+            'success': True,
+            'message': 'Status change notification received'
+        })
+        
+        # Add cache control headers to prevent caching
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        
+        return response
+    except Exception as e:
+        logger.error(f"Error processing status change notification: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/debug/force-sync', methods=['GET'])
+def debug_force_sync():
+    """Debug endpoint to force sync of status values between views"""
+    try:
+        url_key = request.args.get('key')
+        if not url_key:
+            return jsonify({'error': 'Missing URL key parameter'}), 400
+            
+        logger.info(f"DEBUG: Forcing status sync for URL key: {url_key}")
+        mongo_handler = MongoHandler()
+        
+        # Get the document
+        doc = mongo_handler.collection.find_one({"url_key": url_key})
+        if not doc:
+            return jsonify({'error': 'Document not found'}), 404
+            
+        # Debug info about the document
+        logger.info(f"DEBUG: Document _id: {doc.get('_id')}")
+        logger.info(f"DEBUG: Document created_at: {doc.get('created_at')}")
+        logger.info(f"DEBUG: Document status dict: {doc.get('status', {})}")
+        
+        # Check if it's a shared view or main view
+        is_shared_view = isinstance(doc.get('test_data'), list)
+        logger.info(f"DEBUG: Document is shared view: {is_shared_view}")
+        
+        # Get current status values from the document
+        updated_status = {}
+        
+        if is_shared_view:
+            # Shared view - test_data is a list of test case objects
+            for i, tc in enumerate(doc['test_data']):
+                title = tc.get('Title', '')
+                status = tc.get('Status', '')
+                if title:
+                    logger.info(f"DEBUG: Shared view TC[{i}]: {title} = {status}")
+                    updated_status[title] = status
+                    
+            # Update all status values in the document too
+            # Directly update the status field of each test case in the list
+            for i, tc in enumerate(doc['test_data']):
+                title = tc.get('Title', '')
+                if title in updated_status:
+                    logger.info(f"DEBUG: Updating TC[{i}] status: {title} = {updated_status[title]}")
+                    mongo_handler.collection.update_one(
+                        {"url_key": url_key},
+                        {"$set": {f"test_data.{i}.Status": updated_status[title]}}
+                    )
+        else:
+            # Main view - test_data.test_cases is a list of test case objects
+            if 'test_data' in doc and 'test_cases' in doc['test_data']:
+                for i, tc in enumerate(doc['test_data']['test_cases']):
+                    title = tc.get('Title', tc.get('title', ''))
+                    status = tc.get('Status', tc.get('status', ''))
+                    if title:
+                        logger.info(f"DEBUG: Main view TC[{i}]: {title} = {status}")
+                        updated_status[title] = status
+                        
+                # Update all status values in the document too
+                # Directly update the status field of each test case in the list
+                for i, tc in enumerate(doc['test_data']['test_cases']):
+                    title = tc.get('Title', tc.get('title', ''))
+                    if title in updated_status:
+                        logger.info(f"DEBUG: Updating TC[{i}] status: {title} = {updated_status[title]}")
+                        mongo_handler.collection.update_one(
+                            {"url_key": url_key},
+                            {"$set": {f"test_data.test_cases.{i}.status": updated_status[title]}}
+                        )
+                    
+        # Update the central status dictionary
+        if updated_status:
+            logger.info(f"DEBUG: Updating status dictionary with {len(updated_status)} values")
+            mongo_handler.collection.update_one(
+                {"url_key": url_key},
+                {"$set": {"status": updated_status}}
+            )
+            
+        # Add a flag to indicate the sync was forced
+        mongo_handler.collection.update_one(
+            {"url_key": url_key},
+            {"$set": {
+                "status_force_synced_at": datetime.datetime.now(),
+                "status_force_sync_count": doc.get("status_force_sync_count", 0) + 1
+            }}
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Status values forced to sync',
+            'status_values': updated_status,
+            'is_shared_view': is_shared_view
+        })
+    except Exception as e:
+        logger.error(f"Error during force sync: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

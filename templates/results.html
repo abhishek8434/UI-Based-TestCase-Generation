@@ -310,6 +310,27 @@
             font-size: 14px;
         }
 
+        .status-select {
+            width: 100%;
+            min-width: 120px;
+            padding: 4px 8px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: white;
+            color: #041E2B;
+        }
+
+        .status-select:focus {
+            border-color: rgb(76, 171, 114);
+            outline: none;
+            box-shadow: 0 0 0 0.2rem rgba(76, 171, 114, 0.25);
+        }
+
+        .status-select option {
+            padding: 8px;
+        }
+
         .form-check {
             flex: 0 0 calc(25% - 12px);
             cursor: pointer;
@@ -436,6 +457,15 @@
             box-shadow: none;
             font-weight: 400;
         }
+
+        /* Add spinning animation CSS */
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 
@@ -459,11 +489,17 @@
         document.addEventListener('DOMContentLoaded', function () {
             const urlParams = new URLSearchParams(window.location.search);
             const filesParam = urlParams.get('files');
+            const urlKey = urlParams.get('key');
 
-            if (!filesParam) {
-                document.getElementById('testCasesList').innerHTML = '<div class="alert alert-danger">No files specified in URL.</div>';
+            // Check for both required parameters
+            if (!filesParam || !urlKey) {
+                document.getElementById('testCasesList').innerHTML =
+                    `<div class="alert alert-danger">${!filesParam ? 'No files specified in URL.' : 'No URL key found. Please ensure you have a valid URL.'}</div>`;
                 return;
             }
+
+            // Store URL key in a global variable for use across functions
+            window.testCaseUrlKey = urlKey;
 
             try {
                 window.files = JSON.parse(decodeURIComponent(filesParam));
@@ -500,8 +536,8 @@
                     <div class="accordion-body">
                         <div class="mb-3">
                             <div class="btn-group d-flex gap-2" id="buttons-${itemId}">
-                                <a href="/api/download/${fileSet.txt}" class="btn btn-primary" id="txt-${itemId}">Download TXT</a>
-                                <a href="/api/download/${fileSet.excel}" class="btn btn-success" id="excel-${itemId}">Download Excel</a>
+                                <a href="/api/download/${fileSet.txt}?filename=test_${itemId}.txt" class="btn btn-primary" id="txt-${itemId}">Download TXT</a>
+                                <a href="/api/download/${fileSet.excel}?filename=test_${itemId}.xlsx" class="btn btn-success" id="excel-${itemId}">Download Excel</a>
                                 <button class="btn btn-warning" id="copy-table-${itemId}" onclick="copyTestCaseTable('${itemId}')">Copy Table</button>
                                 <button class="btn btn-secondary" id="copy-${itemId}" onclick="copyTestCaseUrl('${itemId}')">Copy URL</button>
                                 <button class="btn btn-primary" id="share-${itemId}" onclick="shareTestCase('${itemId}')">Share URL</button>
@@ -515,7 +551,7 @@
             `;
                 testCasesList.appendChild(accordionItem);
                 console.log(`Created accordion item for ${itemId}`);
-                
+
                 // Automatically load test cases
                 loadTestCases(itemId);
             });
@@ -526,19 +562,45 @@
             // Also check generation status via API
             checkGenerationStatus();
 
+            // Apply saved status values after test cases are loaded
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                        const statusSelects = document.querySelectorAll('.status-select');
+                        if (statusSelects.length > 0) {
+                            console.log('Status selects found, applying saved values');
+                            applyStatusValues();
+                            updateDownloadLinks();
+                        }
+                    }
+                });
+            });
+            
+            // Start observing the document for added nodes
+            observer.observe(document.body, { childList: true, subtree: true });
+
             // Fallback 1: After 2 seconds, try to show content again
             setTimeout(function () {
                 if (window.loadingState.isGenerating) {
                     console.log("First fallback timeout - attempting to show content");
                     verifyFiles();
                 }
+                
+                // Try to apply status values again after a delay
+                applyStatusValues();
             }, 2000); // 2 seconds
 
             // Fallback 2: After 5 seconds, enable download buttons directly
             setTimeout(function () {
                 console.log("Second fallback timeout - enabling download buttons directly");
                 enableDownloadButtons();
+                
+                // Try to apply status values once more
+                applyStatusValues();
             }, 5000); // 5 seconds
+            
+            // Start polling for status updates from shared views
+            setupStatusPolling();
         });
 
         // Function to stop polling
@@ -736,123 +798,199 @@
             window.loadingState.isGenerating = false;
         }
 
+        // Modified function to load test cases without debug controls
         async function loadTestCases(itemId) {
-    console.log(`Loading test cases for ${itemId}`);
+            console.log(`Loading test cases for ${itemId}`);
 
-    // Get container and verify files exist
-    const container = document.getElementById(`testCaseTable${itemId}`);
-    if (!container) {
-        alert('Error: Could not find container for test cases');
-        return;
-    }
+            // Get container and verify files exist
+            const container = document.getElementById(`testCaseTable${itemId}`);
+            if (!container) {
+                alert('Error: Could not find container for test cases');
+                return;
+            }
 
-    try {
-        // Fetch test cases using the correct file path
-        const response = await fetch(`/api/content/${window.files[itemId].excel}`);
-        if (!response.ok) {
-            throw new Error(`HTTP error ${response.status}`);
-        }
+            try {
+                // Fetch test cases using the correct file path with cache busting
+                const timestamp = Date.now();
+                const response = await fetch(`/api/content/${window.files[itemId].excel}?t=${timestamp}`, {
+                    headers: {
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
+                    },
+                    cache: 'no-store'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
 
-        const data = await response.json();
+                const data = await response.json();
 
-        // Handle error in the response
-        if (data.error) {
-            throw new Error(data.error);
-        }
+                // Handle error in the response
+                if (data.error) {
+                    throw new Error(data.error);
+                }
 
-        // Store test cases for sharing
-        if (!window.testCases) window.testCases = {};
-        window.testCases[itemId] = data.content;
+                // Store test cases for sharing
+                if (!window.testCases) window.testCases = {};
+                window.testCases[itemId] = data.content;
 
-        // Display content based on type
-        if (Array.isArray(data.content)) {
-            if (data.content.length > 0) {
-                try {
-                    const table = createTestCaseTable(data.content);
-                    container.innerHTML = '';
-                    container.appendChild(table);
-                } catch (tableError) {
-                    console.error('Error creating table:', tableError);
-                    container.innerHTML = `
+                // Display content based on type
+                if (Array.isArray(data.content)) {
+                    if (data.content.length > 0) {
+                        try {
+                            const table = createTestCaseTable(data.content);
+                            container.innerHTML = '';
+                            container.appendChild(table);
+                            
+                            // Apply any saved status values immediately after table is created
+                            console.log(`Table created for ${itemId}, applying saved status values...`);
+                            setTimeout(() => {
+                                applyStatusValues();
+                                updateDownloadLinks();
+                            }, 50);
+                            
+                        } catch (tableError) {
+                            console.error('Error creating table:', tableError);
+                            container.innerHTML = `
                         <div class="alert alert-warning">
                             <p>Error displaying test case table. Showing raw data instead.</p>
                         </div>
                         <pre class="bg-light p-3">${JSON.stringify(data.content, null, 2)}</pre>
                     `;
+                        }
+                    } else {
+                        container.innerHTML = '<div class="alert alert-info">No test cases found in the file.</div>';
+                    }
                 }
-            } else {
-                container.innerHTML = '<div class="alert alert-info">No test cases found in the file.</div>';
+            } catch (error) {
+                console.error('Error loading test cases:', error);
+                container.innerHTML = `<div class="alert alert-danger">Error loading test cases: ${error.message}</div>`;
             }
         }
-    } catch (error) {
-        console.error('Error loading test cases:', error);
-        container.innerHTML = `<div class="alert alert-danger">Error loading test cases: ${error.message}</div>`;
-    }
+
+        // Extract test case ID from row
+        function extractTestCaseId(row, index) {
+            // Priority 1: Use title as the ID since the user has unique titles
+            if (row['Title']) {
+                console.log(`Using Title as ID: ${row['Title']}`);
+                return row['Title'];
+            }
+            
+            // Priority 2: Use existing Test Case ID field
+            if (row['Test Case ID']) {
+                console.log(`Using Test Case ID field: ${row['Test Case ID']}`);
+                return row['Test Case ID'];
+            }
+            
+            // Priority 3: Use test_case_id field
+            if (row['test_case_id']) {
+                console.log(`Using test_case_id field: ${row['test_case_id']}`);
+                return row['test_case_id'];
+            }
+            
+            // Priority 4: Fallback to generated ID based on index
+            console.log(`Using generated ID for row ${index}: TC_KAN-1_${index + 2}`);
+            return `TC_KAN-1_${index + 2}`;
         }
 
         function createTestCaseTable(content) {
             try {
-                const desiredOrder = ['Title', 'Scenario', 'Steps', 'Expected Result'];
                 const table = document.createElement('table');
-                table.className = 'table table-striped table-bordered';
+                table.className = 'table table-striped';
+                table.setAttribute('data-loaded', 'true');
+
+                // Log the first row of data to see structure
+                if (content && content.length > 0) {
+                    console.log("Sample test case data:", content[0]);
+                }
+
+                // Add Status to desired order
+                const desiredOrder = ['Title', 'Scenario', 'Steps', 'Expected Result', 'Status'];
 
                 // Create table header
                 const thead = document.createElement('thead');
                 thead.innerHTML = `
-                    <tr>
-                        ${desiredOrder.map(header => `<th>${header}</th>`).join('')}
-                    </tr>
-                `;
+            <tr>
+                ${desiredOrder.map(header => `<th>${header}</th>`).join('')}
+            </tr>
+        `;
                 table.appendChild(thead);
 
                 // Create table body
                 const tbody = document.createElement('tbody');
 
-                // Check if content is valid
-                if (!Array.isArray(content)) {
-                    throw new Error('Table content is not an array');
-                }
-
                 // Process each row
                 content.forEach((row, index) => {
-                    if (!row || typeof row !== 'object') {
-                        console.warn(`Row ${index} is not a valid object, skipping`);
-                        return;
-                    }
-
                     const tr = document.createElement('tr');
 
-                    // Process each column in desired order
                     desiredOrder.forEach(header => {
                         const td = document.createElement('td');
-                        const value = row[header];
+                        if (header === 'Status') {
+                            // Get test case ID
+                            let testCaseId = extractTestCaseId(row, index);
+                            console.log(`Using test case ID: ${testCaseId} for row ${index}`);
 
-                        // Handle different value types
-                        if (value === null || value === undefined) {
-                            td.innerHTML = '<em>Not provided</em>';
-                        } else if (Array.isArray(value)) {
-                            // Format array of steps as numbered list
-                            const listHtml = value.map((step, idx) =>
-                                `<div>${idx + 1}. ${step}</div>`
-                            ).join('');
-                            td.innerHTML = listHtml;
-                        } else if (typeof value === 'object') {
-                            try {
-                                td.innerHTML = JSON.stringify(value);
-                            } catch (e) {
-                                td.innerHTML = '<em>Complex value</em>';
+                            // Create status dropdown
+                            const currentStatus = row.Status || '';
+                            td.innerHTML = `
+                        <select class="form-select status-select" 
+                                data-original-value="${currentStatus}" 
+                                data-test-case-id="${testCaseId}">
+                            <option value="" ${!currentStatus ? 'selected' : ''}>Select Status</option>
+                            <option value="Pass" ${currentStatus === 'Pass' ? 'selected' : ''}>Pass</option>
+                            <option value="Fail" ${currentStatus === 'Fail' ? 'selected' : ''}>Fail</option>
+                            <option value="Blocked" ${currentStatus === 'Blocked' ? 'selected' : ''}>Blocked</option>
+                            <option value="Not Tested" ${currentStatus === 'Not Tested' ? 'selected' : ''}>Not Tested</option>
+                        </select>
+                    `;
+                        } else if (header === 'Steps') {
+                            // Try multiple fields for steps data
+                            const value = row[header] || row['Test Steps'] || row['steps'] || [];
+                            
+                            if (value === null || value === undefined) {
+                                td.innerHTML = '<em>Not provided</em>';
+                            } else if (Array.isArray(value)) {
+                                const listHtml = value.map((step, idx) =>
+                                    `<div>${idx + 1}. ${step}</div>`
+                                ).join('');
+                                td.innerHTML = listHtml || '<em>No steps provided</em>';
+                            } else if (typeof value === 'object') {
+                                try {
+                                    td.innerHTML = JSON.stringify(value);
+                                } catch (e) {
+                                    td.innerHTML = '<em>Complex value</em>';
+                                }
+                            } else {
+                                td.innerHTML = String(value).replace(/\n/g, '<br>') || '<em>No steps provided</em>';
                             }
                         } else {
-                            td.innerHTML = String(value).replace(/\n/g, '<br>');
+                            const value = row[header];
+                            if (value === null || value === undefined) {
+                                td.innerHTML = '<em>Not provided</em>';
+                            } else if (Array.isArray(value)) {
+                                const listHtml = value.map((step, idx) =>
+                                    `<div>${idx + 1}. ${step}</div>`
+                                ).join('');
+                                td.innerHTML = listHtml;
+                            } else if (typeof value === 'object') {
+                                try {
+                                    td.innerHTML = JSON.stringify(value);
+                                } catch (e) {
+                                    td.innerHTML = '<em>Complex value</em>';
+                                }
+                            } else {
+                                td.innerHTML = String(value).replace(/\n/g, '<br>');
+                            }
                         }
-
                         tr.appendChild(td);
                     });
-
                     tbody.appendChild(tr);
                 });
 
                 table.appendChild(tbody);
+                
                 return table;
             } catch (error) {
                 console.error('Error creating test case table:', error);
@@ -891,212 +1029,668 @@
             }
         }
     </script>
-</body>
 
-</html>
-
-<script>
-    async function copyTestCaseUrl(itemId) {
-        try {
-            // Make sure test cases are loaded first
-            if (!window.testCases || !window.testCases[itemId]) {
-                // Show loading indicator
-                const copyBtn = document.getElementById(`copy-${itemId}`);
-                const originalText = copyBtn.textContent;
-                copyBtn.textContent = 'Loading...';
-                copyBtn.disabled = true;
-
-                // Fetch test cases data if not already loaded
-                const response = await fetch(`/api/content/${window.files[itemId].excel}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error ${response.status}`);
+    <script>
+        // Improved localStorage persistence for status values
+        function saveStatusesToLocalStorage() {
+            const statusValues = {};
+            const statusSelects = document.querySelectorAll('.status-select');
+            
+            statusSelects.forEach(select => {
+                const testCaseId = select.getAttribute('data-test-case-id');
+                const status = select.value;
+                if (testCaseId && status) {
+                    statusValues[testCaseId] = status;
                 }
+            });
+            
+            const urlKey = window.testCaseUrlKey;
+            if (urlKey) {
+                const storageKey = `status_values_${urlKey}`;
+                console.log(`Saving statuses to localStorage with key "${storageKey}":`, statusValues);
+                localStorage.setItem(storageKey, JSON.stringify(statusValues));
+            }
+        }
 
-                const data = await response.json();
+        // Apply saved status values to the UI as soon as possible
+        function applyStatusValues() {
+            const urlKey = window.testCaseUrlKey;
+            if (!urlKey) {
+                console.warn('Cannot apply status values: No URL key found');
+                return;
+            }
+            
+            try {
+                const storageKey = `status_values_${urlKey}`;
+                const saved = localStorage.getItem(storageKey);
+                console.log(`Checking localStorage for key "${storageKey}":`, saved);
+                
+                if (saved) {
+                    const statusValues = JSON.parse(saved);
+                    console.log('Loaded statuses from localStorage:', statusValues);
+                    
+                    // Apply to all select elements
+                    const statusSelects = document.querySelectorAll('.status-select');
+                    console.log(`Found ${statusSelects.length} status select elements to update`);
+                    
+                    let appliedCount = 0;
+                    statusSelects.forEach(select => {
+                        const testCaseId = select.getAttribute('data-test-case-id');
+                        if (testCaseId && statusValues[testCaseId]) {
+                            select.value = statusValues[testCaseId];
+                            select.setAttribute('data-original-value', statusValues[testCaseId]);
+                            appliedCount++;
+                        }
+                    });
+                    
+                    console.log(`Applied ${appliedCount} saved status values`);
+                    
+                    // Update download links with saved status values
+                    updateDownloadLinks();
+                    return true;
+                } else {
+                    console.log('No saved status values found in localStorage');
+                }
+            } catch (e) {
+                console.error('Error applying saved statuses:', e);
+            }
+            return false;
+        }
 
-                // Store test cases for sharing
-                if (!window.testCases) window.testCases = {};
-                window.testCases[itemId] = data.content;
+        // Direct status collection from DOM - improved to always get latest values
+        function collectStatusValues() {
+            const statusValues = {};
+            const statusSelects = document.querySelectorAll('.status-select');
+            
+            statusSelects.forEach(select => {
+                const testCaseId = select.getAttribute('data-test-case-id');
+                const status = select.value;
+                if (testCaseId && status) {
+                    statusValues[testCaseId] = status;
+                }
+            });
+            
+            console.log('Collected status values:', statusValues);
+            return statusValues;
+        }
 
-                // Restore button state
-                copyBtn.textContent = originalText;
-                copyBtn.disabled = false;
+        // Improved download links update function with forced refresh
+        function updateDownloadLinks() {
+            // Get fresh status values directly from DOM elements
+            const statusSelects = document.querySelectorAll('.status-select');
+            const freshStatusValues = {};
+            
+            statusSelects.forEach(select => {
+                const testCaseId = select.getAttribute('data-test-case-id');
+                const status = select.value;
+                if (testCaseId && status) {
+                    freshStatusValues[testCaseId] = status;
+                    console.log(`Update Download Links - Fresh status for ${testCaseId}: ${status}`);
+                }
+            });
+            
+            const statusParam = encodeURIComponent(JSON.stringify(freshStatusValues));
+            
+            // Always update download links, even with empty status values
+            console.log('Updating download links with fresh status values:', freshStatusValues);
+            
+            Object.entries(window.files).forEach(([itemId, fileSet]) => {
+                const txtBtn = document.getElementById(`txt-${itemId}`);
+                const excelBtn = document.getElementById(`excel-${itemId}`);
+                
+                if (txtBtn) {
+                    const originalUrl = txtBtn.getAttribute('href').split('?')[0]; // Remove existing query params
+                    const newUrl = `${originalUrl}?status=${statusParam}&filename=test_${itemId}.txt&t=${Date.now()}`;
+                    txtBtn.setAttribute('href', newUrl);
+                    console.log(`Updated TXT link to: ${newUrl}`);
+                }
+                
+                if (excelBtn) {
+                    const originalUrl = excelBtn.getAttribute('href').split('?')[0]; // Remove existing query params
+                    const newUrl = `${originalUrl}?status=${statusParam}&filename=test_${itemId}.xlsx&t=${Date.now()}`;
+                    excelBtn.setAttribute('href', newUrl);
+                    console.log(`Updated Excel link to: ${newUrl}`);
+                }
+            });
+        }
+
+        async function copyTestCaseTable(itemId) {
+            const container = document.getElementById(`testCaseTable${itemId}`);
+            if (!container) {
+                alert('Error: Could not find test case container');
+                return;
             }
 
-            const response = await fetch('/api/share', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    test_data: window.testCases[itemId],
-                    item_id: itemId
-                })
+            // Force collection of the latest status values directly from the DOM
+            const currentStatusValues = collectStatusValues();
+            console.log('Status values for copy table:', currentStatusValues);
+
+            // If test cases haven't been loaded yet, load them
+            if (!window.testCases || !window.testCases[itemId]) {
+                try {
+                    // Fetch test cases data
+                    const response = await fetch(`/api/content/${window.files[itemId].excel}`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    if (!window.testCases) window.testCases = {};
+                    window.testCases[itemId] = data.content;
+                } catch (error) {
+                    console.error('Error loading test cases:', error);
+                    alert('Failed to load test cases for copying. Please try again.');
+                    return;
+                }
+            }
+
+            // Get the original test data
+            const testData = window.testCases[itemId];
+            if (!testData || !Array.isArray(testData) || testData.length === 0) {
+                alert('No valid test case data found');
+                return;
+            }
+
+            // Remove Comments from desired order
+            const desiredOrder = ['Title', 'Scenario', 'Steps', 'Expected Result', 'Status'];
+            let copyText = '';
+
+            // Add headers
+            copyText = desiredOrder.join('\t') + '\n';
+
+            // Process each test case and include current status
+            testData.forEach(testCase => {
+                // Get the test case identifier (title)
+                const title = testCase['Title'] || '';
+                
+                // Get current status from DOM values directly
+                const currentStatus = currentStatusValues[title] || testCase['Status'] || '';
+                console.log(`Title: ${title}, Status: ${currentStatus}`);
+                
+                const row = desiredOrder.map(header => {
+                    let value = '';
+                    
+                    if (header === 'Status') {
+                        value = currentStatus;
+                    } else if (header === 'Title') {
+                        value = title;
+                    } else if (header === 'Steps') {
+                        // Check multiple possible field names for steps
+                        value = testCase['Steps'] || testCase['Test Steps'] || testCase['steps'] || '';
+                        
+                        // Handle array of steps
+                        if (Array.isArray(value)) {
+                            return value.map((step, index) => `${index + 1}. ${step}`).join('\n');
+                        }
+                    } else {
+                        value = testCase[header];
+                    }
+
+                    // Handle null or undefined values
+                    if (value === null || value === undefined) {
+                        return 'Not provided';
+                    }
+
+                    // Handle objects
+                    if (typeof value === 'object') {
+                        try {
+                            value = JSON.stringify(value);
+                        } catch (e) {
+                            value = 'Complex value';
+                        }
+                    }
+
+                    // Clean up the value - replace tabs and newlines
+                    return String(value).replace(/\t/g, ' ').replace(/\n/g, ' ');
+                });
+                copyText += row.join('\t') + '\n';
             });
 
-            const data = await response.json();
-            if (data.success) {
-                await navigator.clipboard.writeText(data.share_url);
+            try {
+                await navigator.clipboard.writeText(copyText);
 
-                // Show feedback
-                const copyBtn = document.getElementById(`copy-${itemId}`);
+                // Show feedback on the correct button
+                const copyBtn = document.getElementById(`copy-table-${itemId}`);
                 const originalText = copyBtn.textContent;
-                copyBtn.textContent = 'URL Copied!';
+                copyBtn.textContent = 'Copied!';
+                copyBtn.classList.remove('btn-warning');
+                copyBtn.classList.add('btn-success');
+
                 setTimeout(() => {
                     copyBtn.textContent = originalText;
+                    copyBtn.classList.remove('btn-success');
+                    copyBtn.classList.add('btn-warning');
                 }, 2000);
-            } else {
-                alert('Failed to generate URL: ' + (data.error || 'Unknown error'));
-            }
-        } catch (error) {
-            console.error('Error generating URL:', error);
-            alert('Error generating URL: ' + error.message);
-        }
-    }
-
-    async function shareTestCase(itemId) {
-        try {
-            // Make sure test cases are loaded first
-            if (!window.testCases || !window.testCases[itemId]) {
-                // Show loading indicator
-                const shareBtn = document.getElementById(`share-${itemId}`);
-                const originalText = shareBtn.textContent;
-                shareBtn.textContent = 'Loading...';
-                shareBtn.disabled = true;
-
-                // Fetch test cases data if not already loaded
-                const response = await fetch(`/api/content/${window.files[itemId].excel}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error ${response.status}`);
-                }
-
-                const data = await response.json();
-
-                // Store test cases for sharing
-                if (!window.testCases) window.testCases = {};
-                window.testCases[itemId] = data.content;
-
-                // Restore button state
-                shareBtn.textContent = originalText;
-                shareBtn.disabled = false;
-            }
-
-            const response = await fetch('/api/share', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    test_data: window.testCases[itemId],
-                    item_id: itemId
-                })
-            });
-
-            const data = await response.json();
-            if (data.success) {
-                // Open share dialog if supported
-                if (navigator.share) {
-                    await navigator.share({
-                        title: 'Test Cases',
-                        text: `Test Cases for ${itemId}`,
-                        url: data.share_url
-                    });
-                } else {
-                    // Fallback to copying to clipboard
-                    await navigator.clipboard.writeText(data.share_url);
-
-                    // Show feedback
-                    const shareBtn = document.getElementById(`share-${itemId}`);
-                    const originalText = shareBtn.textContent;
-                    shareBtn.textContent = 'URL Copied!';
-                    setTimeout(() => {
-                        shareBtn.textContent = originalText;
-                    }, 2000);
-                }
-            } else {
-                alert('Failed to generate share URL: ' + (data.error || 'Unknown error'));
-            }
-        } catch (error) {
-            console.error('Error sharing test case:', error);
-            alert('Error sharing test case: ' + error.message);
-        }
-    }
-
-    async function copyTestCaseTable(itemId) {
-        const container = document.getElementById(`testCaseTable${itemId}`);
-        if (!container) {
-            alert('Error: Could not find test case container');
-            return;
-        }
-
-        // If test cases haven't been loaded yet, load them
-        if (container.dataset.loaded !== 'true') {
-            const showButton = document.getElementById(`show-${itemId}`);
-            if (showButton) {
-                await loadTestCases(itemId, showButton);
+            } catch (err) {
+                alert('Failed to copy test cases: ' + err.message);
             }
         }
 
-        // Use the original test data instead of parsing the table
-        const testData = window.testCases[itemId];
-        if (!testData || !Array.isArray(testData) || testData.length === 0) {
-            alert('No valid test case data found');
-            return;
-        }
+        async function copyTestCaseUrl(itemId) {
+            try {
+                // Get the latest status values
+                const currentStatusValues = collectStatusValues();
+                console.log('Status values for copy URL:', currentStatusValues);
+                
+                // Make sure test cases are loaded first
+                if (!window.testCases || !window.testCases[itemId]) {
+                    // Show loading indicator
+                    const copyBtn = document.getElementById(`copy-${itemId}`);
+                    const originalText = copyBtn.textContent;
+                    copyBtn.textContent = 'Loading...';
+                    copyBtn.disabled = true;
 
-        const desiredOrder = ['Title', 'Scenario', 'Steps', 'Expected Result'];
-        let copyText = '';
-
-        // Add headers
-        copyText = desiredOrder.join('\t') + '\n';
-
-        // Process each test case
-        testData.forEach(testCase => {
-            const row = desiredOrder.map(header => {
-                let value = testCase[header];
-
-                // Handle null or undefined values
-                if (value === null || value === undefined) {
-                    return 'Not provided';
-                }
-
-                // Handle Steps field specially
-                if (header === 'Steps' && Array.isArray(value)) {
-                    return value.map((step, index) => `${index + 1}. ${step}`).join('\n');
-                }
-
-                // Handle objects
-                if (typeof value === 'object') {
                     try {
-                        value = JSON.stringify(value);
-                    } catch (e) {
-                        value = 'Complex value';
+                        // Fetch test cases data
+                        const response = await fetch(`/api/content/${window.files[itemId].excel}`);
+                        if (!response.ok) {
+                            throw new Error(`HTTP error ${response.status}`);
+                        }
+
+                        const data = await response.json();
+                        if (!window.testCases) window.testCases = {};
+                        window.testCases[itemId] = data.content;
+                    } finally {
+                        // Restore button state
+                        copyBtn.textContent = originalText;
+                        copyBtn.disabled = false;
                     }
                 }
 
-                // Clean up the value - replace tabs and newlines
-                return String(value).replace(/\t/g, ' ').replace(/\n/g, ' ');
+                // Update status values in the test cases
+                const testCasesWithStatus = window.testCases[itemId].map(tc => {
+                    const title = tc['Title'] || '';
+                    if (title && currentStatusValues[title]) {
+                        return {...tc, Status: currentStatusValues[title]};
+                    }
+                    return tc;
+                });
+
+                const response = await fetch('/api/share', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        test_data: testCasesWithStatus,
+                        item_id: itemId,
+                        status_values: currentStatusValues
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    await navigator.clipboard.writeText(data.share_url);
+
+                    // Show feedback
+                    const copyBtn = document.getElementById(`copy-${itemId}`);
+                    const originalText = copyBtn.textContent;
+                    copyBtn.textContent = 'URL Copied!';
+                    setTimeout(() => {
+                        copyBtn.textContent = originalText;
+                    }, 2000);
+                } else {
+                    alert('Failed to generate URL: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error generating URL:', error);
+                alert('Error generating URL: ' + error.message);
+            }
+        }
+
+        async function shareTestCase(itemId) {
+            try {
+                // Get the latest status values
+                const currentStatusValues = collectStatusValues();
+                console.log('Status values for share URL:', currentStatusValues);
+                
+                // Make sure test cases are loaded first
+                if (!window.testCases || !window.testCases[itemId]) {
+                    // Show loading indicator
+                    const shareBtn = document.getElementById(`share-${itemId}`);
+                    const originalText = shareBtn.textContent;
+                    shareBtn.textContent = 'Loading...';
+                    shareBtn.disabled = true;
+
+                    try {
+                        // Fetch test cases data
+                        const response = await fetch(`/api/content/${window.files[itemId].excel}`);
+                        if (!response.ok) {
+                            throw new Error(`HTTP error ${response.status}`);
+                        }
+
+                        const data = await response.json();
+                        if (!window.testCases) window.testCases = {};
+                        window.testCases[itemId] = data.content;
+                    } finally {
+                        // Restore button state
+                        shareBtn.textContent = originalText;
+                        shareBtn.disabled = false;
+                    }
+                }
+
+                // Update status values in the test cases
+                const testCasesWithStatus = window.testCases[itemId].map(tc => {
+                    const title = tc['Title'] || '';
+                    if (title && currentStatusValues[title]) {
+                        return {...tc, Status: currentStatusValues[title]};
+                    }
+                    return tc;
+                });
+
+                const response = await fetch('/api/share', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        test_data: testCasesWithStatus,
+                        item_id: itemId,
+                        status_values: currentStatusValues
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    // Open share dialog if supported
+                    if (navigator.share) {
+                        await navigator.share({
+                            title: 'Test Cases',
+                            text: `Test Cases for ${itemId}`,
+                            url: data.share_url
+                        });
+                    } else {
+                        // Fallback to copying to clipboard
+                        await navigator.clipboard.writeText(data.share_url);
+
+                        // Show feedback
+                        const shareBtn = document.getElementById(`share-${itemId}`);
+                        const originalText = shareBtn.textContent;
+                        shareBtn.textContent = 'URL Copied!';
+                        setTimeout(() => {
+                            shareBtn.textContent = originalText;
+                        }, 2000);
+                    }
+                } else {
+                    alert('Failed to generate share URL: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error sharing test case:', error);
+                alert('Error sharing test case: ' + error.message);
+            }
+        }
+
+        // Add polling for status updates
+        function setupStatusPolling() {
+            console.log('Setting up status polling');
+            
+            // Immediately poll once on page load
+            pollForStatusUpdates();
+            
+            // Then poll for status updates every 5 seconds (more frequent than before)
+            const pollInterval = setInterval(pollForStatusUpdates, 5000);
+            
+            // Store the interval ID so it can be cleared if needed
+            window.statusPollInterval = pollInterval;
+        }
+
+        // Separate function to poll for status updates that can be called immediately
+        async function pollForStatusUpdates() {
+            if (!window.testCaseUrlKey) {
+                console.log('No URL key available, skipping status poll');
+                return;
+            }
+            
+            try {
+                console.log('Polling for status updates...');
+                
+                // Add cache-busting parameter to prevent caching
+                const timestamp = new Date().getTime();
+                const response = await fetch(`/api/shared-status?key=${window.testCaseUrlKey}&t=${timestamp}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.status_values && Object.keys(data.status_values).length > 0) {
+                        console.log('Received updated status values:', data.status_values);
+                        
+                        // Apply status updates and get whether any changes were made
+                        const updatesApplied = applyStatusValuesFromServer(data.status_values);
+                        
+                        // Also update localStorage with these values
+                        mergeWithLocalStorage(data.status_values);
+                        
+                        // Update download links if any values were updated
+                        if (updatesApplied) {
+                            console.log('Status values were updated, refreshing download links');
+                            updateDownloadLinks();
+                        }
+                    } else {
+                        console.log('No status values received from server');
+                    }
+                } else {
+                    console.error('Error response from status API:', response.status);
+                }
+            } catch (error) {
+                console.error('Error polling for status updates:', error);
+            }
+        }
+
+        // Apply status values fetched from server, only updating if values are different
+        function applyStatusValuesFromServer(statusValues) {
+            const statusSelects = document.querySelectorAll('.status-select');
+            let updatesApplied = false;
+            
+            statusSelects.forEach(select => {
+                const testCaseId = select.getAttribute('data-test-case-id');
+                if (testCaseId && statusValues[testCaseId] && select.value !== statusValues[testCaseId]) {
+                    console.log(`Updating status for ${testCaseId} to ${statusValues[testCaseId]} (was: ${select.value})`);
+                    select.value = statusValues[testCaseId];
+                    select.setAttribute('data-original-value', statusValues[testCaseId]);
+                    updatesApplied = true;
+                }
             });
-            copyText += row.join('\t') + '\n';
+            
+            if (updatesApplied) {
+                console.log('Status updates were applied from server');
+            }
+            
+            return updatesApplied;
+        }
+
+        // Merge server status values with localStorage
+        function mergeWithLocalStorage(statusValues) {
+            try {
+                const urlKey = window.testCaseUrlKey;
+                if (!urlKey) return;
+                
+                const storageKey = `status_values_${urlKey}`;
+                const savedStr = localStorage.getItem(storageKey);
+                let savedValues = savedStr ? JSON.parse(savedStr) : {};
+                
+                // Merge with new values (server values take precedence)
+                const mergedValues = {...savedValues, ...statusValues};
+                
+                // Save back to localStorage
+                localStorage.setItem(storageKey, JSON.stringify(mergedValues));
+                console.log('Updated localStorage with merged status values');
+            } catch (e) {
+                console.error('Error merging status with localStorage:', e);
+            }
+        }
+
+        // The implementation of updateTestCaseStatus with immediate download link update
+        async function updateTestCaseStatus(testCaseId, status, event) {
+            const select = event.target;
+            const originalValue = select.getAttribute('data-original-value') || '';
+
+            // Skip update if status is empty
+            if (!status) {
+                console.log('Empty status selected, skipping update');
+                return;
+            }
+
+            try {
+                // Use the stored URL key
+                const urlKey = window.testCaseUrlKey;
+
+                console.log('Update Status Request - Identifier:', testCaseId);
+                console.log('Update Status Request - Status:', status);
+                console.log('Update Status Request - URL Key:', urlKey);
+
+                // Get the test case ID from the data attribute if not provided or undefined
+                if (!testCaseId || testCaseId === "undefined") {
+                    testCaseId = select.getAttribute('data-test-case-id');
+                    console.log('Using test case ID from data attribute:', testCaseId);
+                }
+
+                if (!testCaseId || testCaseId === "undefined" || testCaseId === 'N/A') {
+                    console.error('Test Case identifier is undefined or empty');
+                    throw new Error('Test Case identifier is missing or invalid. Cannot update status.');
+                }
+
+                if (!urlKey) {
+                    console.error('URL Key is undefined or empty');
+                    throw new Error('URL key is missing. Please reload the page with a valid URL.');
+                }
+
+                select.disabled = true;
+
+                // Format the request data to match backend expectations
+                const requestData = {
+                    test_case_id: testCaseId, // Using the title as the identifier
+                    status: status,
+                    key: urlKey
+                };
+
+                console.log('Sending request data:', JSON.stringify(requestData));
+
+                const response = await fetch('/api/update-status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                console.log('Response status:', response.status);
+                console.log('Response status text:', response.statusText);
+
+                if (!response.ok) {
+                    let errorMessage = 'Failed to update status';
+                    try {
+                        const errorData = await response.json();
+                        console.error('Error response data:', errorData);
+                        errorMessage = errorData.message || errorData.error || errorMessage;
+                    } catch (jsonError) {
+                        console.error('Error parsing error response:', jsonError);
+                        // Try to get response text if JSON parsing fails
+                        try {
+                            const textResponse = await response.text();
+                            console.error('Error response text:', textResponse);
+                        } catch (textError) {
+                            console.error('Could not get response text:', textError);
+                        }
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                // Update was successful
+                select.setAttribute('data-original-value', status);
+                
+                // Save to localStorage
+                saveStatusesToLocalStorage();
+                
+                // Force a sync with MongoDB to ensure all status values are up to date
+                try {
+                    await fetch(`/api/debug/force-sync?key=${urlKey}&t=${Date.now()}`);
+                    console.log('Force-synced status values with MongoDB');
+                } catch (syncError) {
+                    console.warn('Failed to force-sync with MongoDB:', syncError);
+                }
+                
+                // Immediately update download links with the new status
+                // Get all the current status values directly from the DOM
+                const freshStatusValues = {};
+                const statusSelects = document.querySelectorAll('.status-select');
+                statusSelects.forEach(s => {
+                    const id = s.getAttribute('data-test-case-id');
+                    const val = s.value;
+                    if (id && val) {
+                        freshStatusValues[id] = val;
+                    }
+                });
+                
+                // Update download links with fresh status values
+                const statusParam = encodeURIComponent(JSON.stringify(freshStatusValues));
+                
+                // Update all download links with the latest values
+                Object.entries(window.files).forEach(([itemId, fileSet]) => {
+                    const txtBtn = document.getElementById(`txt-${itemId}`);
+                    const excelBtn = document.getElementById(`excel-${itemId}`);
+                    
+                    if (txtBtn) {
+                        const originalUrl = txtBtn.getAttribute('href').split('?')[0];
+                        const newUrl = `${originalUrl}?status=${statusParam}&filename=test_${itemId}.txt&t=${Date.now()}`;
+                        txtBtn.setAttribute('href', newUrl);
+                        console.log(`Updated TXT link with fresh status values`);
+                    }
+                    
+                    if (excelBtn) {
+                        const originalUrl = excelBtn.getAttribute('href').split('?')[0];
+                        const newUrl = `${originalUrl}?status=${statusParam}&filename=test_${itemId}.xlsx&t=${Date.now()}`;
+                        excelBtn.setAttribute('href', newUrl);
+                        console.log(`Updated Excel link with fresh status values`);
+                    }
+                });
+
+                // Show success message
+                const successMessage = document.createElement('div');
+                successMessage.className = 'alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3';
+                successMessage.style.zIndex = '1000';
+                successMessage.textContent = 'Status updated successfully';
+                document.body.appendChild(successMessage);
+
+                setTimeout(() => successMessage.remove(), 3000);
+
+            } catch (error) {
+                console.error('Error updating status:', error);
+                alert(error.message || 'Failed to update status. Please try again.');
+                select.value = originalValue; // Revert to original value
+            } finally {
+                select.disabled = false;
+            }
+        }
+
+        // Add event listener to update download links immediately when status changes
+        document.addEventListener('change', function(e) {
+            if (e.target.classList.contains('status-select')) {
+                e.target.setAttribute('data-previous-value', e.target.value);
+                const testCaseId = e.target.getAttribute('data-test-case-id');
+                console.log('Status changed for test case ID:', testCaseId);
+                console.log('New status:', e.target.value);
+                
+                // Save to localStorage immediately on change
+                saveStatusesToLocalStorage();
+                
+                // Update download links IMMEDIATELY when status changes
+                updateDownloadLinks();
+                
+                // Call the update function to send to server
+                updateTestCaseStatus(testCaseId, e.target.value, e);
+            }
         });
 
-        try {
-            await navigator.clipboard.writeText(copyText);
+        // Ensure status values are reapplied when table is opened
+        document.addEventListener('click', function(e) {
+            // If clicking on accordion header to expand
+            if (e.target && e.target.classList.contains('accordion-button')) {
+                setTimeout(() => {
+                    applyStatusValues();
+                    updateDownloadLinks();
+                }, 200);
+            }
+        });
+    </script>
+</body>
 
-            // Show feedback on the correct button
-            const copyBtn = document.getElementById(`copy-table-${itemId}`); // Fixed button ID
-            const originalText = copyBtn.textContent;
-            copyBtn.textContent = 'Copied!';
-            copyBtn.classList.remove('btn-warning');
-            copyBtn.classList.add('btn-success');
-
-            setTimeout(() => {
-                copyBtn.textContent = originalText;
-                copyBtn.classList.remove('btn-success');
-                copyBtn.classList.add('btn-warning');
-            }, 2000);
-        } catch (err) {
-            alert('Failed to copy test cases: ' + err.message);
-        }
-    }
-</script>
+</html>

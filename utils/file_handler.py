@@ -98,7 +98,7 @@ def save_excel_report(test_cases: str, base_name: str) -> Optional[str]:
             df['Section'] = df['Section'].fillna('General')
             
         # Ensure all required columns exist
-        required_columns = ['Title', 'Scenario', 'Steps', 'Expected Result', 'Actual Result', 'Priority']
+        required_columns = ['Title', 'Scenario', 'Steps', 'Expected Result', 'Actual Result', 'Status', 'Priority']
         for col in required_columns:
             if col not in df.columns:
                 df[col] = ''
@@ -111,7 +111,7 @@ def save_excel_report(test_cases: str, base_name: str) -> Optional[str]:
         df = df.fillna('')
 
         # Reorder columns, starting with the most important ones
-        column_order = ['Section', 'Title', 'Scenario', 'Steps', 'Expected Result', 'Actual Result', 'Priority']
+        column_order = ['Section', 'Title', 'Scenario', 'Steps', 'Expected Result', 'Status', 'Actual Result', 'Priority']
         # Add any additional columns that might be present
         for col in df.columns:
             if col not in column_order:
@@ -255,6 +255,12 @@ def parse_traditional_format(test_cases: str, default_section: str = "General") 
         actual_match = re.match(r'^(?:\*\*)?Actual Result:(?:\*\*)?\s*(.*?)$', line)
         if actual_match and current_test:
             current_test['Actual Result'] = actual_match.group(1).strip()
+            continue
+            
+        # Handle status
+        status_match = re.match(r'^(?:\*\*)?Status:(?:\*\*)?\s*(.*?)$', line)
+        if status_match and current_test:
+            current_test['Status'] = status_match.group(1).strip()
             continue
             
         # Handle priority
