@@ -10,6 +10,7 @@ import logging
 # Add at the top of the file
 from utils.mongo_handler import MongoHandler
 import datetime
+import math
 
 app = Flask(__name__)
 CORS(app)
@@ -789,15 +790,28 @@ def download_shared_excel(url_key):
 def get_generation_status():
     try:
         with generation_status['lock']:
+            # Calculate progress percentage based on completed types vs total types
+            progress_percentage = 0
+            if generation_status['total_types']:
+                progress_percentage = (len(generation_status['completed_types']) / len(generation_status['total_types'])) * 100
+                
+            # Ensure progress is a valid number between 0-100
+            if math.isnan(progress_percentage) or progress_percentage < 0:
+                progress_percentage = 0
+            elif progress_percentage > 100:
+                progress_percentage = 100
+            
             response = {
                 'is_generating': generation_status['is_generating'],
                 'completed_types': list(generation_status['completed_types']),
-                'total_types': list(generation_status['total_types'])
+                'total_types': list(generation_status['total_types']),
+                'progress_percentage': progress_percentage,
+                'files_ready': not generation_status['is_generating']
             }
         return jsonify(response)
     except Exception as e:
         logger.error(f"Error getting generation status: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'progress_percentage': 0, 'is_generating': False, 'files_ready': True}), 500
 
 @app.route('/api/shared-status', methods=['GET'])
 def get_shared_status():

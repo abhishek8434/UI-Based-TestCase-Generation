@@ -32,6 +32,7 @@
             width: 100%;
             height: 100%;
             transform: rotate(-90deg);
+            animation: circleRotate 1.5s linear infinite;
         }
 
         .loader-bg,
@@ -52,8 +53,14 @@
             stroke-linecap: round;
             transform-origin: center;
             stroke-dasharray: 283;
-            stroke-dashoffset: 283;
+            /* Ensure at least a small part of the circle is always visible */
+            stroke-dashoffset: 252; /* Default to showing ~10% of the circle */
             transition: stroke-dashoffset 0.3s ease;
+        }
+
+        /* Ensure at least part of the circle is visible even at 0% */
+        .loader-fg.visible-progress {
+            stroke-dashoffset: 275; /* Show a small part of the circle even at 0% */
         }
 
         .loader-text {
@@ -64,6 +71,8 @@
             font-size: 24px;
             color: white;
             font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            z-index: 20;
         }
 
         .loader {
@@ -466,6 +475,64 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* Improved continuous rotation animation for the circular loader */
+        @keyframes circleRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .circular-animate {
+            animation: circleRotate 1.5s linear infinite;
+        }
+
+        /* Add a pulsating effect to make the loading indicator more noticeable */
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #FF3D00;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite, pulse 2s ease-in-out infinite;
+        }
+
+        /* Add a continuously rotating spinner ring */
+        .spinner-ring {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: conic-gradient(
+                #FF3D00 0deg, 
+                rgba(255, 61, 0, 0.8) 90deg, 
+                rgba(255, 61, 0, 0.6) 180deg,
+                rgba(255, 61, 0, 0.4) 270deg,
+                rgba(255, 61, 0, 0.1) 360deg
+            );
+            animation: spinnerRotate 1.5s linear infinite;
+            z-index: 10;
+        }
+
+        @keyframes spinnerRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Make the progress circle semi-transparent to see the spinner behind it */
+        .circular-loader {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+            position: relative;
+            z-index: 5;
+        }
     </style>
 </head>
 
@@ -529,7 +596,7 @@
                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
                             data-bs-target="#collapse${itemId}" aria-expanded="false" aria-controls="collapse${itemId}">
                         Test Cases for ${itemId}
-                        <span id="status-${itemId}" class="ms-2"><span class="loading"></span> Generating test cases...</span>
+                        <span id="status-${itemId}" class="ms-2">Generating test cases...</span>
                     </button>
                 </h2>
                 <div id="collapse${itemId}" class="accordion-collapse collapse" aria-labelledby="heading${itemId}" data-bs-parent="#testCasesList">
@@ -544,7 +611,7 @@
                             </div>
                         </div>
                         <div id="testCaseTable${itemId}" class="table-container">
-                            <div class="text-center"><span class="loading"></span> Loading test cases...</div>
+                            <div class="text-center">Loading test cases...</div>
                         </div>
                     </div>
                 </div>
@@ -637,8 +704,20 @@
                 // Update progress for each item
                 Object.entries(window.files).forEach(([itemId]) => {
                     const statusSpan = document.getElementById(`status-${itemId}`);
-                    const progress = Math.round(status.progress_percentage);
-                    statusSpan.innerHTML = `<span class="loading"></span> Generating... ${progress}% complete`;
+                    // Make sure progress is a valid number, defaulting to '' (no percentage) if invalid
+                    let progress = status.progress_percentage;
+                    
+                    // Check if progress is a valid number and between 0-100
+                    if (typeof progress !== 'number' || isNaN(progress) || progress < 0 || progress > 100) {
+                        // Don't show percentage if invalid
+                        statusSpan.innerHTML = 'Generating test cases...';
+                    } else {
+                        // Only show percentage if it's a valid number
+                        progress = Math.round(progress);
+                        // Calculate offset ensuring at least 10% is visible at 0%
+                        const dashOffset = progress === 0 ? 252 : progress === 100 ? 0 : 283 - (progress / 100) * 283;
+                        statusSpan.innerHTML = `Generating... ${progress}% complete`;
+                    }
                 });
 
                 // Check if generation is complete and files are ready
@@ -1191,63 +1270,108 @@
                 return;
             }
 
-            // Remove Comments from desired order
+            // Create a dual format for compatibility with both Excel and email
             const desiredOrder = ['Title', 'Scenario', 'Steps', 'Expected Result', 'Status'];
-            let copyText = '';
-
-            // Add headers
-            copyText = desiredOrder.join('\t') + '\n';
-
-            // Process each test case and include current status
-            testData.forEach(testCase => {
-                // Get the test case identifier (title)
-                const title = testCase['Title'] || '';
+            
+            // Create an HTML table for better email/message display
+            let htmlTable = '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; font-family: Arial, sans-serif; font-size: 14px;">\n';
+            
+            // Add header row
+            htmlTable += '<tr style="background-color: #f2f2f2; font-weight: bold;">';
+            desiredOrder.forEach(header => {
+                htmlTable += `<th style="border: 1px solid #ddd; padding: 8px; text-align: left;">${header}</th>`;
+            });
+            htmlTable += '</tr>\n';
+            
+            // Add data rows
+            testData.forEach((testCase, index) => {
+                // Apply alternating row colors for better readability
+                const rowStyle = index % 2 === 0 ? 'background-color: #ffffff;' : 'background-color: #f9f9f9;';
+                htmlTable += `<tr style="${rowStyle}">`;
                 
-                // Get current status from DOM values directly
-                const currentStatus = currentStatusValues[title] || testCase['Status'] || '';
-                console.log(`Title: ${title}, Status: ${currentStatus}`);
-                
-                const row = desiredOrder.map(header => {
+                desiredOrder.forEach(header => {
                     let value = '';
                     
                     if (header === 'Status') {
-                        value = currentStatus;
+                        // Get current status from DOM values directly
+                        const testCaseId = testCase['Title'] || '';
+                        value = currentStatusValues[testCaseId] || testCase['Status'] || '';
                     } else if (header === 'Title') {
-                        value = title;
+                        value = testCase['Title'] || '';
                     } else if (header === 'Steps') {
-                        // Check multiple possible field names for steps
-                        value = testCase['Steps'] || testCase['Test Steps'] || testCase['steps'] || '';
+                        // Format steps with proper numbering
+                        let stepsValue = testCase['Steps'] || testCase['Test Steps'] || testCase['steps'] || '';
                         
-                        // Handle array of steps
-                        if (Array.isArray(value)) {
-                            return value.map((step, index) => `${index + 1}. ${step}`).join('\n');
+                        if (Array.isArray(stepsValue)) {
+                            value = stepsValue.map((step, idx) => `${idx + 1}. ${step}`).join('<br>');
+                        } else {
+                            value = String(stepsValue || 'Not provided');
                         }
                     } else {
-                        value = testCase[header];
+                        value = testCase[header] || 'Not provided';
                     }
-
-                    // Handle null or undefined values
-                    if (value === null || value === undefined) {
-                        return 'Not provided';
-                    }
-
-                    // Handle objects
-                    if (typeof value === 'object') {
+                    
+                    // Clean and format the value for HTML
+                    if (typeof value === 'object' && !Array.isArray(value)) {
                         try {
                             value = JSON.stringify(value);
                         } catch (e) {
                             value = 'Complex value';
                         }
                     }
-
-                    // Clean up the value - replace tabs and newlines
-                    return String(value).replace(/\t/g, ' ').replace(/\n/g, ' ');
+                    
+                    // Preserve line breaks in HTML but clean up other special characters
+                    const formattedValue = String(value)
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/\n/g, '<br>');
+                        
+                    htmlTable += `<td style="border: 1px solid #ddd; padding: 8px; text-align: left;">${formattedValue}</td>`;
                 });
-                copyText += row.join('\t') + '\n';
+                
+                htmlTable += '</tr>\n';
+            });
+            
+            htmlTable += '</table>';
+            
+            // Also create a plain-text tab-delimited version for Excel pasting
+            let plainText = desiredOrder.join('\t') + '\n';
+            
+            testData.forEach(testCase => {
+                const row = desiredOrder.map(header => {
+                    if (header === 'Status') {
+                        const testCaseId = testCase['Title'] || '';
+                        return currentStatusValues[testCaseId] || testCase['Status'] || '';
+                    } else if (header === 'Title') {
+                        return testCase['Title'] || '';
+                    } else if (header === 'Steps') {
+                        let steps = testCase['Steps'] || testCase['Test Steps'] || testCase['steps'] || '';
+                        if (Array.isArray(steps)) {
+                            return steps.map((step, idx) => `${idx + 1}. ${step}`).join(' ');
+                        }
+                        return steps;
+                    } else {
+                        return testCase[header] || '';
+                    }
+                });
+                
+                plainText += row.map(cell => String(cell).replace(/\t/g, ' ').replace(/\n/g, ' ')).join('\t') + '\n';
             });
 
             try {
-                await navigator.clipboard.writeText(copyText);
+                // We're using the ClipboardItem API to set both HTML and text formats
+                if (navigator.clipboard.write && ClipboardItem) {
+                    const clipboardContent = new ClipboardItem({
+                        'text/html': new Blob([htmlTable], {type: 'text/html'}),
+                        'text/plain': new Blob([plainText], {type: 'text/plain'})
+                    });
+                    
+                    await navigator.clipboard.write([clipboardContent]);
+                } else {
+                    // Fallback to setting just text if the ClipboardItem API is not available
+                    await navigator.clipboard.writeText(plainText);
+                }
 
                 // Show feedback on the correct button
                 const copyBtn = document.getElementById(`copy-table-${itemId}`);
@@ -1262,6 +1386,7 @@
                     copyBtn.classList.add('btn-warning');
                 }, 2000);
             } catch (err) {
+                console.error('Clipboard error:', err);
                 alert('Failed to copy test cases: ' + err.message);
             }
         }

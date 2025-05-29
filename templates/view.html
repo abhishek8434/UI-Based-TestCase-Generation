@@ -511,13 +511,72 @@
 
                             // Include Status in the desired order
                             const desiredOrder = ['Title', 'Scenario', 'Steps', 'Expected Result', 'Status'];
-                            let copyText = '';
-
-                            // Add headers
-                            copyText += desiredOrder.join('\t') + '\n';
-
-                            // Add rows (get current status from DOM)
+                            
+                            // Get current status values from DOM
                             const currentStatusValues = collectStatusValues();
+                            
+                            // Create an HTML table for better email/message display
+                            let htmlTable = '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; font-family: Arial, sans-serif; font-size: 14px;">\n';
+                            
+                            // Add header row
+                            htmlTable += '<tr style="background-color: #f2f2f2; font-weight: bold;">';
+                            desiredOrder.forEach(header => {
+                                htmlTable += `<th style="border: 1px solid #ddd; padding: 8px; text-align: left;">${header}</th>`;
+                            });
+                            htmlTable += '</tr>\n';
+                            
+                            // Add data rows
+                            testData.forEach((row, index) => {
+                                // Apply alternating row colors for better readability
+                                const rowStyle = index % 2 === 0 ? 'background-color: #ffffff;' : 'background-color: #f9f9f9;';
+                                htmlTable += `<tr style="${rowStyle}">`;
+                                
+                                desiredOrder.forEach(header => {
+                                    let value;
+                                    
+                                    if (header === 'Status') {
+                                        // Get current status from DOM if available
+                                        const testCaseId = row['Title'] || '';
+                                        value = currentStatusValues[testCaseId] || row['Status'] || '';
+                                    } else if (header === 'Steps') {
+                                        // Special handling for Steps field which might be an array
+                                        let stepsValue = row['Steps'] || '';
+                                        
+                                        if (Array.isArray(stepsValue)) {
+                                            value = stepsValue.map((step, idx) => `${idx + 1}. ${step}`).join('<br>');
+                                        } else {
+                                            value = String(stepsValue || 'Not provided');
+                                        }
+                                    } else {
+                                        value = row[header] || 'Not provided';
+                                    }
+                                    
+                                    // Clean and format the value for HTML
+                                    if (typeof value === 'object' && !Array.isArray(value)) {
+                                        try {
+                                            value = JSON.stringify(value);
+                                        } catch (e) {
+                                            value = 'Complex value';
+                                        }
+                                    }
+                                    
+                                    // Preserve line breaks in HTML but clean up other special characters
+                                    const formattedValue = String(value)
+                                        .replace(/&/g, '&amp;')
+                                        .replace(/</g, '&lt;')
+                                        .replace(/>/g, '&gt;')
+                                        .replace(/\n/g, '<br>');
+                                        
+                                    htmlTable += `<td style="border: 1px solid #ddd; padding: 8px; text-align: left;">${formattedValue}</td>`;
+                                });
+                                
+                                htmlTable += '</tr>\n';
+                            });
+                            
+                            htmlTable += '</table>';
+                            
+                            // Also create a plain text version for Excel compatibility
+                            let plainText = desiredOrder.join('\t') + '\n';
                             
                             testData.forEach(row => {
                                 const rowData = desiredOrder.map(header => {
@@ -527,30 +586,42 @@
                                         // Get current status from DOM if available
                                         const testCaseId = row['Title'] || '';
                                         value = currentStatusValues[testCaseId] || row['Status'] || '';
+                                    } else if (header === 'Steps') {
+                                        // Special handling for Steps field which might be an array
+                                        let steps = row['Steps'] || '';
+                                        if (Array.isArray(steps)) {
+                                            return steps.map((step, idx) => `${idx + 1}. ${step}`).join(' ');
+                                        }
+                                        return steps || 'Not provided';
                                     } else {
-                                        value = row[header];
+                                        value = row[header] || 'Not provided';
                                     }
-
-                                    // Special handling for Steps field which might be an array
-                                    if (header === 'Steps' && Array.isArray(value)) {
-                                        value = value.map((step, index) => `${index + 1}. ${step}`).join('\n');
-                                    }
-
-                                    if (value === null || value === undefined) {
-                                        return 'Not provided';
-                                    } else if (typeof value === 'object' && !Array.isArray(value)) {
+                                    
+                                    if (typeof value === 'object' && !Array.isArray(value)) {
                                         try {
                                             return JSON.stringify(value);
                                         } catch (e) {
                                             return 'Complex value';
                                         }
                                     }
+                                    
                                     return String(value).replace(/\t/g, ' ').replace(/\n/g, ' ');
                                 });
-                                copyText += rowData.join('\t') + '\n';
+                                plainText += rowData.join('\t') + '\n';
                             });
 
-                            await navigator.clipboard.writeText(copyText);
+                            // Use ClipboardItem API to set both HTML and text formats
+                            if (navigator.clipboard.write && ClipboardItem) {
+                                const clipboardContent = new ClipboardItem({
+                                    'text/html': new Blob([htmlTable], {type: 'text/html'}),
+                                    'text/plain': new Blob([plainText], {type: 'text/plain'})
+                                });
+                                
+                                await navigator.clipboard.write([clipboardContent]);
+                            } else {
+                                // Fallback to setting just text if the ClipboardItem API is not available
+                                await navigator.clipboard.writeText(plainText);
+                            }
 
                             // Show feedback
                             const originalText = this.innerHTML;

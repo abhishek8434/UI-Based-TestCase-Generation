@@ -33,6 +33,7 @@
             width: 100%;
             height: 100%;
             transform: rotate(-90deg);
+            animation: circleRotate 1.5s linear infinite;
         }
 
         .loader-bg,
@@ -49,12 +50,18 @@
         }
 
         .loader-fg {
-            stroke: #FF3D00;
+            stroke: #4CAA72;
             stroke-linecap: round;
             transform-origin: center;
             stroke-dasharray: 283;
-            stroke-dashoffset: 283;
+            /* Ensure at least a small part of the circle is always visible */
+            stroke-dashoffset: 252; /* Default to showing ~10% of the circle */
             transition: stroke-dashoffset 0.3s ease;
+        }
+
+        /* Ensure at least part of the circle is visible even at 0% */
+        .loader-fg.visible-progress {
+            stroke-dashoffset: 275; /* Show a small part of the circle even at 0% */
         }
 
         .loader-text {
@@ -65,6 +72,8 @@
             font-size: 24px;
             color: white;
             font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            z-index: 20;
         }
 
         .loader {
@@ -88,7 +97,7 @@
             transform: translate(-50%, 0);
             position: absolute;
             border: 15px solid transparent;
-            border-top-color: #FF3D00;
+            border-top-color: #4CAA72;
             box-sizing: border-box;
             animation: fadePush 1s linear infinite;
         }
@@ -101,9 +110,42 @@
             position: absolute;
             width: 15px;
             height: 15px;
-            background: #FF3D00;
+            background: #4CAA72;
             box-sizing: border-box;
             animation: fadePush 1s linear infinite;
+        }
+
+        /* Add continuous rotation animation for the circular loader */
+        @keyframes circleRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Basic spin animation for loading indicators */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .circular-animate {
+            animation: circleRotate 1.5s linear infinite;
+        }
+
+        /* Add a pulsating effect to make the loading indicator more noticeable */
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #FF3D00;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite, pulse 2s ease-in-out infinite;
         }
 
         @keyframes fadePush {
@@ -345,6 +387,39 @@
             }
 
         }
+
+        /* Add a continuously rotating spinner ring */
+        .spinner-ring {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: conic-gradient(
+                #FF3D00 0deg, 
+                rgba(255, 61, 0, 0.8) 90deg, 
+                rgba(255, 61, 0, 0.6) 180deg,
+                rgba(255, 61, 0, 0.4) 270deg,
+                rgba(255, 61, 0, 0.1) 360deg
+            );
+            animation: spinnerRotate 1.5s linear infinite;
+            z-index: 10;
+        }
+
+        @keyframes spinnerRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Make the progress circle semi-transparent to see the spinner behind it */
+        .circular-loader {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+            position: relative;
+            z-index: 5;
+        }
     </style>
 </head>
 
@@ -353,9 +428,9 @@
     <!-- Replace the existing loader div with this new structure -->
     <div class="loader-container">
         <div class="percentage-loader">
-            <svg class="circular-loader" viewBox="0 0 100 100">
-                <circle class="loader-bg" cx="50" cy="50" r="45"></circle>
-                <circle class="loader-fg" cx="50" cy="50" r="45"></circle>
+            <svg class="circular-loader circular-animate" viewBox="0 0 100 100">
+                <circle class="loader-bg" cx="50" cy="50" r="45" />
+                <circle class="loader-fg" cx="50" cy="50" r="45" />
             </svg>
             <div class="loader-text" id="loader-text">0%</div>
         </div>
@@ -838,14 +913,26 @@
             percentage = Math.min(100, Math.max(0, percentage));
 
             // For 100%, make sure offset is exactly 0
-            const offset = percentage === 100 ? 0 : circumference - (percentage / 100) * circumference;
+            let offset;
+            if (percentage === 100) {
+                offset = 0;
+            } else if (percentage === 0) {
+                // For 0%, show at least a small portion of the circle (~10%)
+                offset = circumference * 0.9;
+            } else {
+                offset = circumference - (percentage / 100) * circumference;
+            }
 
             // Set both strokeDasharray and strokeDashoffset
             circle.style.strokeDasharray = `${circumference}`;
             circle.style.strokeDashoffset = offset;
-
-            // Update the text
-            text.textContent = `${Math.round(percentage)}%`;
+            
+            // Update the text - If NaN display "Processing..." instead of percentage
+            if (isNaN(percentage) || percentage < 0) {
+                text.textContent = "Processing...";
+            } else {
+                text.textContent = `${Math.round(percentage)}%`;
+            }
         }
 
         async function checkGenerationStatus(loader, result) {
